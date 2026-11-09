@@ -1,5 +1,5 @@
 """
-Author: Richard Clark
+Author: Jessie W
 
 tsp_loader.py - Unified orchestrator for Travelling Salesperson Problem algorithms.
 
