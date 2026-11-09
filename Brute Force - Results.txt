@@ -1,0 +1,30 @@
+Brute Force - Results
+
+4 locations
+
+Optimal Route: London -> Birmingham -> Bristol -> Manchester -> London
+Minimum Distance: 580 miles
+Routes Checked: 6
+Execution Time: 0.000020 seconds
+
+8 locations
+
+Optimal Route: London -> Birmingham -> Bristol -> Liverpool -> Manchester -> Leeds -> Sheffield -> Nottingham -> London
+Minimum Distance: 685 miles
+Routes Checked: 5,040
+Execution Time: 0.010032 seconds
+
+12 locations
+
+Optimal Route: London -> Oxford -> Cardiff -> Bristol -> Birmingham -> Liverpool -> Manchester -> Leeds -> York -> Sheffield -> Nottingham -> Cambridge -> London
+Minimum Distance: 905 miles
+Routes Checked: 39,916,800
+Execution Time: 110.392313 seconds
+
+12 locations with branch bound
+
+Optimal Route: London -> Oxford -> Cardiff -> Bristol -> Birmingham -> Liverpool -> Manchester -> Leeds -> York -> Sheffield -> Nottingham -> Cambridge -> London
+Minimum Distance: 905 miles
+Complete Routes Checked: 4,161
+Branches Pruned: 5,225,804
+Execution Time: 2.169740 seconds
