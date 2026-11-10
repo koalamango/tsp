@@ -2,11 +2,20 @@
 Author: Oshanda Hembathanthrige
 """
 # run this in terminal to install the required packages: py -m pip install pandas openpyxl
+from pathlib import Path
 import pandas as pd
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 #Read an Excel sheet (only one triangle needed), Returns (cities, distances).
 def load_distance(path, sheet_name=0):
-    df = pd.read_excel(path, sheet_name=sheet_name, index_col=0)
+    resolved_path = Path(path)
+    if not resolved_path.exists():
+        for candidate in (PROJECT_ROOT / path, PROJECT_ROOT / "data" / path):
+            if candidate.exists():
+                resolved_path = candidate
+                break
+    df = pd.read_excel(resolved_path, sheet_name=sheet_name, index_col=0)
     # Remove empty spaces from column and row names (Ex: " Canary wharf " -> "Canary wharf")
     df.columns = [str(c).strip() for c in df.columns]
     df.index = [str(i).strip() for i in df.index]

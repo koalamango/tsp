@@ -1,7 +1,7 @@
 """
 Author: Richard Clark
 
-Run: py nearest_neighbour.py "C:/path/cities.xlsx"
+Run: python algorithm/heuristics/nearest_neighbour.py "data/coordinates_20_cities.xlsx"
 
 Requires: py -m pip install openpyxl scipy
 
@@ -15,61 +15,15 @@ from pathlib import Path
 from time import perf_counter
 
 import numpy as np
-from openpyxl import load_workbook
 from scipy.optimize import Bounds, LinearConstraint, milp
 from scipy.sparse import lil_matrix
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-from tsp_utils import markdown_table
-
-
-def read_cities(file_path):
-    workbook = load_workbook(file_path, read_only=True, data_only=True)
-    try:
-        sheet = (
-            workbook["Cities"]
-            if "Cities" in workbook.sheetnames
-            else workbook.worksheets[0]
-        )
-        rows = iter(sheet.values)
-        header = next(rows, ())
-
-        if [str(v).strip().lower() for v in header[:3]] != ["city", "x", "y"]:
-            raise ValueError("The first three columns must be City, X, Y.")
-
-        cities, points = [], []
-
-        for row in rows:
-            if all(v is None for v in row[:3]):
-                continue
-
-            name, x, y = row[:3]
-
-            if name is None or not str(name).strip() or x is None or y is None:
-                raise ValueError("Each city needs a name and two coordinates.")
-
-            point = (float(x), float(y))
-
-            if not all(math.isfinite(v) for v in point):
-                raise ValueError("Coordinates must be finite numbers.")
-
-            cities.append(str(name))
-            points.append(point)
-
-        if len(cities) < 2:
-            raise ValueError("At least two cities are required.")
-
-        return cities, points
-    finally:
-        workbook.close()
-
-
-def build_euclidean_matrix(points):
-    """Build a symmetric Euclidean distance matrix from (X, Y) coordinates."""
-    return [
-        [math.dist(a, b) for b in points]
-        for a in points
-    ]
+from utils.tsp_data import build_euclidean_matrix, read_cities
+from utils.tsp_utils import markdown_table
 
 
 def nearest_neighbour(distances):
@@ -325,7 +279,7 @@ def save_report(
     ]
 
     spreadsheet = Path(file_path)
-    outputs_dir = Path("outputs")
+    outputs_dir = PROJECT_ROOT / "outputs"
     outputs_dir.mkdir(parents=True, exist_ok=True)
     output = outputs_dir / f"{spreadsheet.stem}_{suffix}_results.md"
     output.write_text("\n".join(lines) + "\n", encoding="utf-8")

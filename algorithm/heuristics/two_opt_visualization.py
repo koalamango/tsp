@@ -1,19 +1,28 @@
-"""Animate 2-opt improvements to a nearest-neighbour tour.
+"""
+Author: Richard Clark
 
-Run: python Group_Work/two_opt_visualization.py
+Animate 2-opt improvements to a nearest-neighbour tour.
+
+Run: python algorithm/heuristics/two_opt_visualization.py data/coordinates_10_cities.xlsx
 Or supply an Excel path. Click the plot to advance each stage.
 Excel columns: City, X, Y. Requires matplotlib, openpyxl, numpy and scipy.
 """
 
 import argparse
 import math
+from pathlib import Path
+import sys
 
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
-from nearest_neighbour import nearest_neighbour, read_cities, route_length
-from two_opt import two_opt
-from visualization_window import fit_window_to_screen, wait_for_click
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from algorithm.heuristics.nearest_neighbour import nearest_neighbour, read_cities, route_length
+from algorithm.heuristics.two_opt import two_opt
+from algorithm.heuristics.visualization_window import fit_window_to_screen, wait_for_click
 
 
 PAD = 20

@@ -1,17 +1,20 @@
 """
 Author: Richard Clark
 
-Keep this file in the SAME FOLDER as nearest_neighbour.py.
-
-Run: py two_opt.py "C:/path/cities.xlsx"
+Run: python algorithm/heuristics/two_opt.py "data/coordinates_20_cities.xlsx"
 
 This creates its own nearest-neighbour route, then improves it with 2-opt.
-It imports shared functions, not saved results, from nearest_neighbour.py.
+It imports shared functions, not saved results, from algorithm.heuristics.nearest_neighbour.
 """
+from pathlib import Path
 import sys
 from time import perf_counter
 
-from nearest_neighbour import (
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from algorithm.heuristics.nearest_neighbour import (
     build_euclidean_matrix,
     read_cities,
     nearest_neighbour,
@@ -20,7 +23,7 @@ from nearest_neighbour import (
 )
 
 
-def two_opt(route, distances):
+def two_opt(route, distances, on_move=None):
     """Best-improvement 2-opt for symmetric distances."""
     route = route.copy()
     n = len(route) - 1
@@ -53,8 +56,10 @@ def two_opt(route, distances):
             return route, checks, passes, moves
 
         i, j = best_pair
-        route[i + 1:j + 1] = reversed(route[i + 1:j + 1])
         moves += 1
+        if on_move is not None:
+            on_move(route.copy(), i, j, moves)
+        route[i + 1:j + 1] = reversed(route[i + 1:j + 1])
 
 
 def main(file_path):

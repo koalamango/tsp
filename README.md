@@ -25,14 +25,9 @@ The project provides implementations ranging from exact solvers (brute-force per
 - [Data Formats](#data-formats)
 - [Installation & Requirements](#installation--requirements)
 - [Usage](#usage)
-  - [Unified Algorithm Orchestrator](#unified-algorithm-orchestrator-tsp_loaderpy)
-  - [Nearest Neighbour](#running-nearest-neighbour)
-  - [2-Opt Refinement](#running-2-opt)
-  - [3-Opt Refinement](#running-3-opt)
-  - [Branch and Bound](#running-branch-and-bound)
-  - [Brute Force with Real-Time Visualization](#running-brute-force-visualizer)
-  - [Metaheuristics (Simulated Annealing & ACO)](#running-metaheuristics)
-  - [Data Loading Utilities](#data-loading-utilities)
+  - [Unified Algorithm Orchestrator (`tsp_loader.py`)](#unified-algorithm-orchestrator-tsp_loaderpy)
+  - [Running Individual Solvers](#running-individual-solvers)
+  - [Interactive Visualizers](#interactive-visualizers)
 - [Output Reports](#output-reports)
 
 ---
@@ -54,47 +49,51 @@ Because TSP is NP-hard, exact approaches become intractable as the number of cit
 
 ### 1. Exact Methods
 
-- **Brute-Force Search with Live Visualization (`brute_force_visualized.py`)**:
+- **Brute-Force Search with Live Visualization (`algorithm/exact/brute_force_visualized.py`)**:
   - Evaluates all $(n - 1)!$ permutations starting and ending at a fixed city (e.g., London).
   - Features real-time animated plotting in Matplotlib, displaying current route evaluations, best-so-far distances, and the final optimal tour, as well as a headless runner (`run_brute_force`) used by `tsp_loader.py`.
-  - Benchmarks recorded in `Brute Force - Results.txt` illustrate the factorial explosion ($n = 12$ requires checking 39.9M routes in ~110 seconds without pruning, or ~2.17 seconds with branch-and-bound pruning).
+  - Demonstrates the factorial explosion of exhaustive search ($n = 12$ requires checking 39.9M routes in ~110 seconds without pruning, or ~2.17 seconds with branch-and-bound pruning).
 
-- **Branch and Bound (`branch_and_bound.py`)**:
+- **Branch and Bound (`algorithm/exact/branch_and_bound.py`)**:
   - Exact depth-first tree search with admissible lower-bound pruning based on each unvisited city's minimum outgoing edge.
   - Uses an initial heuristic upper bound (e.g. Nearest Neighbour or 2-Opt) to prune suboptimal partial tours early, dramatically reducing the search space compared to exhaustive brute force.
 
 - **HiGHS Mixed-Integer Linear Programming (`scipy.optimize.milp`)**:
-  - Embedded in `nearest_neighbour.py` and `three_opt.py` as an exact ground-truth solver.
+  - Embedded in `algorithm/heuristics/nearest_neighbour.py` and `algorithm/heuristics/three_opt.py` as an exact ground-truth solver.
   - Employs the Dantzig-Fulkerson-Johnson (DFJ) formulation with dynamic subtour-elimination cuts.
   - Proves the true global optimum ($\text{MIP gap} = 0.0$) to benchmark heuristic accuracy.
 
 ### 2. Constructive Heuristics
 
-- **Nearest Neighbour (`nearest_neighbour.py`)**:
+- **Nearest Neighbour (`algorithm/heuristics/nearest_neighbour.py`)**:
   - Greedily extends the tour by choosing the closest unvisited city at each step until a full cycle is formed.
   - Runs in $O(n^2)$ time with exactly $n(n - 1) / 2$ candidate-distance examinations.
   - Automatically compares against the exact MILP solution and outputs an audit report (`outputs/<input>_nearest_neighbour_results.md`).
+  - Includes an interactive step-by-step visualizer (`algorithm/heuristics/nearest_neighbour_visualization.py`).
 
 ### 3. Local Search & Improvement Heuristics
 
-- **2-Opt Local Search (`two_opt.py`)**:
+- **2-Opt Local Search (`algorithm/heuristics/two_opt.py`)**:
   - Takes an initial tour (constructed via Nearest Neighbour) and iteratively eliminates crossed edges by reversing tour segments.
   - Implements best-improvement 2-opt: evaluates all non-adjacent edge pairs ($n(n - 3) / 2$ pairs per complete scan) in $O(1)$ difference calculation per pair.
   - Reconstructs only accepted moves in $O(n)$, repeating scans until a local optimum is reached ($O(p \cdot n^2)$ where $p$ is the number of passes).
+  - Includes an interactive edge-swap visualizer (`algorithm/heuristics/two_opt_visualization.py`).
 
-- **3-Opt Local Search (`three_opt.py`)**:
+- **3-Opt Local Search (`algorithm/heuristics/three_opt.py`)**:
   - Evaluates all $\binom{n}{3} = n(n - 1)(n - 2) / 6$ edge triplets and tests all 7 valid reconnection arrangements per triplet.
   - Tests each candidate reconnection in $O(1)$ arithmetic without copying full arrays; rebuilds only accepted moves in $O(n)$.
   - Provides deeper optimization than 2-opt, escaping 2-optimal local minima.
+  - Includes an interactive triplet-reconnection visualizer (`algorithm/heuristics/three_opt_visualization.py`).
 
 ### 4. Metaheuristics
 
-- **Simulated Annealing (`metaheuristic.py`)**:
+- **Simulated Annealing (`algorithm/metaheuristics/metaheuristic.py` & `algorithm/metaheuristics/simulated_annealing_visualized.py`)**:
   - Probabilistic technique based on thermal annealing.
   - Uses geometric cooling ($T_{k+1} = \alpha \cdot T_k$) and the Metropolis acceptance criterion ($\Delta < 0$ or $P < e^{-\Delta / T}$).
   - Employs a hybrid neighborhood operator: 70% 2-opt segment reversals and 30% 2-city swaps.
+  - Includes an animated multi-panel visualizer (`algorithm/metaheuristics/simulated_annealing_visualized.py`) with live route evolution, distance convergence, and cooling curves.
 
-- **Ant Colony Optimization (ACO) (`metaheuristic.py`)**:
+- **Ant Colony Optimization (ACO) (`algorithm/metaheuristics/metaheuristic.py`)**:
   - Nature-inspired population metaheuristic (Ant System).
   - Uses pheromone trails ($\tau_{ij}$) and distance visibility ($\eta_{ij} = 1 / d_{ij}$).
   - Artificial ants construct tours stochastically based on transition probabilities $P_{ij} \propto (\tau_{ij})^\alpha \cdot (\eta_{ij})^\beta$, followed by pheromone evaporation and deposit reinforcement.
@@ -121,31 +120,52 @@ Because TSP is NP-hard, exact approaches become intractable as the number of cit
 ## Repository Structure
 
 ```text
-tsp_algorithms/
-├── tsp_loader.py                   # Unified orchestrator to run all algorithms & generate comparison tables
-├── brute_force_visualized.py       # Exhaustive search with animated Matplotlib circular visualization
-├── branch_and_bound.py             # Exact branch-and-bound solver with partial-tour pruning
-├── nearest_neighbour.py            # Nearest neighbour heuristic + HiGHS exact solver & report generator
-├── two_opt.py                      # 2-opt local search refinement with detailed performance metrics
-├── three_opt.py                    # 3-opt local search (7 reconnection cases) with performance report
-├── metaheuristic.py                # Simulated Annealing and Ant Colony Optimization implementations
-├── tsp_charts.py                   # Matplotlib chart generator for per-dataset and scalability reports
-├── tsp_utils.py                    # Shared gap-formatting and Markdown table helpers
-├── xlsx_dictionary.py              # Data loader for symmetric Excel distance matrices
-├── xlsx_cartesian_dictionary.py    # Data loader for 2D Cartesian coordinate Excel sheets
-├── requirements.txt                # Project package dependencies
+tsp/
+├── tsp_loader.py                                   # Unified orchestrator to run all algorithms & generate comparison tables
+├── requirements.txt                                # Project package dependencies
+├── README.md                                       # Project documentation
 │
-├── Brute Force - Results.txt       # Benchmarking log for brute-force & branch-and-bound runs
+├── algorithm/
+│   ├── exact/
+│   │   ├── brute_force_visualized.py               # Exhaustive search with animated Matplotlib circular visualization
+│   │   ├── branch_and_bound.py                     # Exact branch-and-bound solver with partial-tour pruning
+│   │   └── data_visualization.py                   # 2D coordinate map plotter for city datasets
+│   │
+│   ├── approximation/                              # Approximation algorithms directory
+│   │   └── christofides.py                         # Christofides approximation algorithm
+│   │
+│   ├── heuristics/
+│   │   ├── nearest_neighbour.py                    # Nearest neighbour heuristic + HiGHS exact solver & report generator
+│   │   ├── nearest_neighbour_visualization.py      # Interactive click-through Nearest Neighbour visualizer
+│   │   ├── two_opt.py                              # 2-opt local search refinement with detailed performance metrics
+│   │   ├── two_opt_visualization.py                # Interactive click-through 2-opt move visualizer
+│   │   ├── three_opt.py                            # 3-opt local search (7 reconnection cases) with performance report
+│   │   ├── three_opt_visualization.py              # Interactive click-through 3-opt move visualizer
+│   │   └── visualization_window.py                 # Screen-fitting and click-event helpers for Matplotlib windows
+│   │
+│   └── metaheuristics/
+│       ├── metaheuristic.py                        # Simulated Annealing and Ant Colony Optimization implementations
+│       └── simulated_annealing_visualized.py       # Animated Simulated Annealing visualizer with live convergence & GIF export
 │
-├── outputs/                        # Generated Markdown reports and per-run CSV exports (created on first run)
-│   └── charts/                     # Generated PNG charts embedded in the benchmark reports
+├── utils/
+│   ├── tsp_charts.py                               # Matplotlib chart generator for per-dataset and scalability reports
+│   ├── tsp_data.py                                 # Unified dataset loader (Cartesian coordinates & symmetric distance matrices)
+│   ├── tsp_utils.py                                # Shared gap-formatting, tour list, and Markdown table helpers
+│   ├── xlsx_dictionary.py                          # Standalone data loader for symmetric Excel distance matrices
+│   └── xlsx_cartesian_dictionary.py                # Standalone data loader for 2D Cartesian coordinate Excel sheets
+│
+├── outputs/                                        # Generated Markdown reports and per-run CSV exports (created on first run)
+│   └── charts/                                     # Generated PNG charts and GIF animations
 │
 └── data/
-    ├── cities_10_cartesian.xlsx    # 10-city dataset (City, X, Y coordinates)
-    ├── cities_20_cartesian.xlsx    # 20-city dataset (City, X, Y coordinates)
-    ├── cities_40_cartestian.xlsx   # 40-city dataset (City, X, Y coordinates)
-    ├── cities_80_cartesian.xlsx    # 80-city dataset (City, X, Y coordinates)
-    └── distances_20_cities.xlsx    # 20-city symmetric distance matrix
+    ├── cities_10_bad_two_opt.xlsx                  # 10-city dataset illustrating 2-opt local optima
+    ├── cities_10_clustered_bad_nn.xlsx             # 10-city clustered dataset illustrating greedy NN pitfalls
+    ├── coordinates_5_cities.xlsx                   # 5-city coordinate dataset (City, X, Y coordinates)
+    ├── coordinates_10_cities.xlsx                  # 10-city coordinate dataset (City, X, Y coordinates)
+    ├── coordinates_20_cities.xlsx                  # 20-city coordinate dataset (City, X, Y coordinates)
+    ├── coordinates_40_cities.xlsx                  # 40-city coordinate dataset (City, X, Y coordinates)
+    ├── coordinates_80_cities.xlsx                  # 80-city coordinate dataset (City, X, Y coordinates)
+    └── distances_20_cities.xlsx                    # 20-city symmetric distance matrix
 ```
 
 ---
@@ -154,7 +174,7 @@ tsp_algorithms/
 
 The project supports two Excel data formats:
 
-### 1. Cartesian Coordinates (`cities_*.xlsx`)
+### 1. Cartesian Coordinates (`coordinates_*.xlsx`)
 Spreadsheets with columns: `City` (or `Location`), `X`, `Y`.
 - The first city listed is treated as the starting/finishing depot.
 - Straight-line Euclidean distance $d = \sqrt{(x_1 - x_2)^2 + (y_1 - y_2)^2}$ is used.
@@ -184,18 +204,13 @@ source .venv/bin/activate
 
 ### 2. Install Dependencies
 
-Install all required packages using [`requirements.txt`](file:///C:/Users/philr/PycharmProjects/tsp_algorithms/requirements.txt):
+Install all required packages using [`requirements.txt`](requirements.txt):
 
 ```bash
 pip install -r requirements.txt
 ```
 
-The dependencies include:
-- `pandas`: Tabular data loading and manipulation for Excel distance matrices and coordinate sheets.
-- `openpyxl`: Excel `.xlsx` reader engine used by pandas and the standalone loaders.
-- `scipy`: Mixed-Integer Linear Programming solver (`scipy.optimize.milp` / HiGHS) for finding provable ground-truth optimal routes with subtour-elimination cuts.
-- `numpy`: Matrix and vector operations for MILP constraint matrices, distance lookups, and metaheuristic operators.
-- `matplotlib`: Dynamic visualization and route animations for the brute-force visualizer.
+The project relies on standard scientific Python packages (`scipy`, `numpy`, `pandas`, `matplotlib`, `openpyxl`).
 
 ---
 
@@ -203,12 +218,18 @@ The dependencies include:
 
 ### Unified Algorithm Orchestrator (`tsp_loader.py`)
 
-Run all algorithms in turn across the 10-city, 20-city, 40-city, and 80-city Cartesian datasets, automatically generating comparative benchmark tables. Each algorithm is run several times per dataset (10 by default) so that runtime, and for the stochastic algorithms solution quality, can be reported as min / mean / max / standard deviation:
+Run all algorithms across benchmark datasets, automatically generating comparative benchmark tables, per-dataset runtime/distance charts, and cross-dataset scalability summaries. `tsp_loader.py` auto-detects both **Cartesian coordinate** spreadsheets and **symmetric distance matrix** sheets. Each algorithm is run several times per dataset (10 by default) so that runtime, and for stochastic algorithms solution quality, can be reported as min / mean / max / standard deviation:
 
 ```bash
-# Run the complete suite on the 10, 20, 40 and 80-city datasets, 10 runs per algorithm
-# (includes 10-city brute-force & branch-and-bound demo)
+# Run the complete default benchmark suite (10, 20, 40, and 80-city Cartesian datasets)
 python tsp_loader.py
+
+# Run on specific Cartesian coordinate datasets:
+python tsp_loader.py data/coordinates_10_cities.xlsx
+python tsp_loader.py data/coordinates_5_cities.xlsx data/coordinates_10_cities.xlsx data/coordinates_20_cities.xlsx
+
+# Run on symmetric distance matrix datasets:
+python tsp_loader.py data/distances_20_cities.xlsx
 
 # Change the number of runs per algorithm (default 10, must be at least 1)
 python tsp_loader.py --runs 25
@@ -222,6 +243,7 @@ python tsp_loader.py --no-exact
 
 | Option | Description | Default |
 |:---|:---|:---|
+| `datasets` | Optional dataset filepaths (Cartesian coordinates or symmetric distance matrices, e.g. `data/coordinates_10_cities.xlsx` or `data/distances_20_cities.xlsx`). If omitted, runs default suite | `CARTESIAN_SUITES` |
 | `--runs`, `-r` | Number of timed runs per algorithm | `10` |
 | `--seed` | Base random seed for Simulated Annealing and Ant Colony (run *i* uses `seed + i`) | `42` |
 | `--no-exact` | Skip the exact MILP baseline | off |
@@ -230,92 +252,68 @@ See [Output Reports](#output-reports) for what is measured and recorded.
 
 ---
 
-### Running Individual Algorithms
+### Running Individual Solvers
 
-#### Running Nearest Neighbour
-Constructs a greedy tour, calculates the exact MILP optimum, and produces a Markdown report:
-
-```bash
-python nearest_neighbour.py data/cities_20_cartesian.xlsx
-```
-*(Or run `python nearest_neighbour.py` and enter the file path interactively.)*
-
-### Running 2-Opt
-Generates a Nearest Neighbour tour and iteratively applies 2-opt edge-reversal moves:
+Each algorithm can also be executed standalone on any Cartesian coordinate (`coordinates_*.xlsx`) or distance matrix (`distances_*.xlsx`) dataset:
 
 ```bash
-python two_opt.py data/cities_20_cartesian.xlsx
+# Nearest Neighbour (constructs greedy tour and compares against exact MILP)
+python algorithm/heuristics/nearest_neighbour.py data/coordinates_20_cities.xlsx
+
+# 2-Opt Local Search (edge-reversal refinement from a Nearest Neighbour tour)
+python algorithm/heuristics/two_opt.py data/coordinates_20_cities.xlsx
+
+# 3-Opt Local Search (triplet reconnection refinement from a Nearest Neighbour tour)
+python algorithm/heuristics/three_opt.py data/coordinates_20_cities.xlsx
+
+# Branch and Bound (exact solver with pruning for small instances, e.g. n <= 10)
+python algorithm/exact/branch_and_bound.py data/coordinates_10_cities.xlsx
+
+# Metaheuristics (runs Simulated Annealing & Ant Colony Optimization with MILP baseline)
+python algorithm/metaheuristics/metaheuristic.py data/coordinates_20_cities.xlsx
+python algorithm/metaheuristics/metaheuristic.py data/coordinates_80_cities.xlsx --no-exact
 ```
 
-### Running 3-Opt
-Generates a Nearest Neighbour tour and applies 3-opt triplet reconnections:
+---
 
-```bash
-python three_opt.py data/cities_20_cartesian.xlsx
-```
+### Interactive Visualizers
 
-### Running Branch and Bound
-Solves a Cartesian dataset to global optimality using Branch and Bound seeded with a Nearest Neighbour upper bound:
+The repository provides graphical tools for interactive examination of tour progression and state spaces:
 
-```bash
-python branch_and_bound.py data/cities_10_cartesian.xlsx
-```
+- **Constructive & Local Search Visualizers (Click-Through Step-by-Step)**:
+  Interactive Matplotlib windows stepping through individual greedy choices or accepted edge swaps:
+  ```bash
+  python algorithm/heuristics/nearest_neighbour_visualization.py data/coordinates_10_cities.xlsx
+  python algorithm/heuristics/two_opt_visualization.py data/coordinates_10_cities.xlsx
+  python algorithm/heuristics/three_opt_visualization.py data/coordinates_10_cities.xlsx
+  ```
 
-### Running Brute Force Visualizer
-Launches an animated circular graph displaying tour permutations in real time:
+- **Brute-Force Permutation Visualizer**:
+  Animated circular layout demonstrating factorial permutation space in real time:
+  ```bash
+  python algorithm/exact/brute_force_visualized.py
+  ```
+  *(Enter a distance matrix containing "London", e.g. `data/distances_20_cities.xlsx`. For $n > 10$, this serves as a live demonstration of factorial explosion—close the window when done observing.)*
 
-```bash
-python brute_force_visualized.py
-```
-*Prompt: Enter the filename (e.g., `data/distances_20_cities.xlsx`).*
+- **Simulated Annealing Animated Visualizer & GIF Exporter**:
+  Real-time multi-panel visualization of temperature decay, tour untangling, and distance convergence:
+  ```bash
+  # Live interactive GUI on the default 80-city dataset
+  python algorithm/metaheuristics/simulated_annealing_visualized.py
 
-### Running Metaheuristics
-Execute directly from the command line to run both Simulated Annealing and Ant Colony Optimization, compute the exact HiGHS MILP baseline, generate a dual-panel convergence chart (`outputs/charts/*_convergence.png`), and write a Markdown report (`outputs/*_metaheuristic_results.md`):
+  # Start from a Nearest Neighbour seed instead of a random route
+  python algorithm/metaheuristics/simulated_annealing_visualized.py data/coordinates_80_cities.xlsx --nn-seed
 
-```bash
-# Run with default 20-city Cartesian dataset (data/cities_20_cartesian.xlsx)
-python metaheuristic.py
-
-# Run on a custom Cartesian coordinate dataset or symmetric distance matrix
-python metaheuristic.py data/cities_10_cartesian.xlsx
-python metaheuristic.py data/distances_20_cities.xlsx
-
-# Custom parameters: random seed, SA iterations, ACO iterations, or skip exact baseline
-python metaheuristic.py data/cities_20_cartesian.xlsx --seed 42 --sa-iter 10000 --aco-iter 200
-python metaheuristic.py data/cities_80_cartesian.xlsx --no-exact
-```
-
-Alternatively, import and run Simulated Annealing or Ant Colony Optimization in a script or interactive session:
-
-```python
-from metaheuristic import load_distance_excel, solve_tsp_sa, solve_tsp_aco
-
-cities, dist_matrix = load_distance_excel("data/distances_20_cities.xlsx")
-
-# Solve via Simulated Annealing
-sa_result = solve_tsp_sa(dist_matrix, t_init=500.0, alpha=0.997, max_iter=8000, seed=42)
-print("SA Best Distance:", sa_result["distance"])
-
-# Solve via Ant Colony Optimization
-aco_result = solve_tsp_aco(dist_matrix, n_ants=20, n_iter=150, seed=42)
-print("ACO Best Distance:", aco_result["distance"])
-```
-
-> **Note:** the parameters above are fixed values for a simple example. `tsp_loader.py` instead scales Simulated Annealing to the problem size (see [Output Reports](#output-reports)) and gives each run a different seed (`--seed` + run index).
-
-### Data Loading Utilities
-Inspect parsed coordinates or distance matrices:
-
-```bash
-python xlsx_cartesian_dictionary.py
-python xlsx_dictionary.py
-```
+  # Export animation directly to GIF (use --frames 60 for fast generation)
+  python algorithm/metaheuristics/simulated_annealing_visualized.py data/coordinates_80_cities.xlsx --save-gif outputs/charts/sa_80_cities.gif --frames 60
+  ```
+  *Key arguments: `--save-gif [PATH]` (headless GIF export), `--frames N` (frame count), `--nn-seed` (seed with NN tour), `--iter N` (iteration budget).*
 
 ---
 
 ## Output Reports
 
-All execution scripts (`nearest_neighbour.py`, `two_opt.py`, `three_opt.py`, `branch_and_bound.py`, and `tsp_loader.py`) automatically save formatted Markdown (`.md`) reports into the dedicated [`outputs/`](file:///C:/Users/philr/PycharmProjects/tsp_algorithms/outputs) directory (e.g. `outputs/cities_20_cartesian_two_opt_results.md`).
+All execution scripts automatically save formatted Markdown (`.md`) reports into the dedicated [`outputs/`](outputs/) directory (e.g. `outputs/tsp_loader_coordinates_80_cities_results.md`).
 
 Each individual algorithm report includes:
 - **Route Quality**: Final distance, theoretical shortest distance (via HiGHS MILP), percentage of optimum, and distance excess.
@@ -340,13 +338,11 @@ When multiple datasets of different city counts are evaluated in a run, `tsp_loa
 - **Best Result vs. Number of Cities**: Multi-line graph displaying the percentage gap above the proven optimum ($(\text{distance} / \text{optimum} - 1) \times 100\%$) across all problem sizes. Methods that run only on small instances (Brute Force, Branch and Bound) are rendered as individual benchmark points.
 - **Summary Comparison Tables**: Side-by-side runtime and solution-quality tables across all evaluated city counts.
 
-All chart images are automatically generated via Matplotlib and saved to [`outputs/charts/`](file:///C:/Users/philr/PycharmProjects/tsp_algorithms/outputs/charts).
+All chart images are automatically generated via Matplotlib and saved to [`outputs/charts/`](outputs/charts).
 
-Notes on how the numbers are produced:
 
-- **Deterministic vs non-deterministic:** Exact MILP, Nearest Neighbour, 2-Opt, 3-Opt, Brute Force and Branch and Bound always return the same tour, so only their runtime varies between runs. Simulated Annealing and Ant Colony Optimization are stochastic: run *i* uses seed `--seed + i`, so runs differ but the whole benchmark is reproducible.
-- **Warm-up:** each algorithm is run once before timing starts and that run is discarded. The first call pays one-off costs (lazy imports, solver set-up, cold caches), which would otherwise inflate the maximum runtime and SD.
-- **2-Opt / 3-Opt timing (†):** both require a Nearest Neighbour tour as input, so their reported time is the NN construction time plus the refinement time. The report tables carry a footnote saying so.
-- **Simulated Annealing scaling:** when run through `tsp_loader.py`, Simulated Annealing iterations are `max(8000, 50 · n²)`, the starting temperature is calibrated from the dataset (so an average uphill move is accepted ~80% of the time), and the cooling rate is fitted so the temperature reaches 0.1% of its start value at the final iteration. The parameters used are listed in each report header.
+### NOTE 
 
-Every timed run is also exported to `outputs/tsp_loader_<dataset>_runs.csv` (columns: `algorithm, deterministic, run, seed, distance, time_sec`) for further analysis in Excel or pandas. Warm-up runs are not included.
+ - **Reproducibility & Statistics:** Non-deterministic algorithms (Simulated Annealing and Ant Colony Optimization) vary their seed on each run (`--seed + i`), while deterministic algorithms return the same tour every run. Each algorithm executes an untimed warm-up run first to eliminate initialization overhead.
+ - **2-Opt / 3-Opt Timing:** Includes Nearest Neighbour construction time because refinement requires a valid initial tour.
+ - **Raw Data Export:** Every timed run is exported to `outputs/tsp_loader_<dataset>_runs.csv` (columns: `algorithm, deterministic, run, seed, distance, time_sec`) for analysis in pandas or Excel. Warm-up runs are excluded.

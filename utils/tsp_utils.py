@@ -1,4 +1,6 @@
 """
+Author: Jessie W
+
 tsp_utils.py - Shared formatting and Markdown report helpers for TSP algorithms.
 """
 from __future__ import annotations
@@ -47,6 +49,27 @@ def format_gap(
     if zero_label is not None and gap <= 0:
         return zero_label
     return f"{gap:+.{precision}f}%"
+
+
+def format_route(
+    route: Sequence[int],
+    cities: Sequence[str],
+    max_display: Optional[int] = 7,
+) -> str:
+    """Format an index route into a readable city name string with optional truncation."""
+    names = [cities[idx] for idx in route]
+    if max_display is None or len(names) <= max_display + 2:
+        return " -> ".join(names)
+    half = max_display // 2
+    return " -> ".join(names[:half]) + " -> ... -> " + " -> ".join(names[-half:])
+
+
+def format_tour_list(
+    route: Sequence[int],
+    cities: Sequence[str],
+) -> List[str]:
+    """Format an index route into an enumerated numbered list of city names."""
+    return [f"{idx}. {cities[c]}" for idx, c in enumerate(route, 1)]
 
 
 def markdown_table(

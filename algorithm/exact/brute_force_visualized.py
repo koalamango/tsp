@@ -4,9 +4,12 @@ Author: Oshanda Hembathanthrige
 
 import itertools
 import math
+from pathlib import Path
 import time
 import pandas as pd
 import matplotlib.pyplot as plt
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 # Time between iterations
 ITERATION_DELAY = 0
@@ -14,8 +17,14 @@ ITERATION_DELAY = 0
 
 # 1. Read the Excel distance matrix
 def load_distance(path, sheet_name=0):
+    resolved_path = Path(path)
+    if not resolved_path.exists():
+        for candidate in (PROJECT_ROOT / path, PROJECT_ROOT / "data" / path):
+            if candidate.exists():
+                resolved_path = candidate
+                break
 
-    df = pd.read_excel(path, sheet_name=sheet_name, index_col=0)
+    df = pd.read_excel(resolved_path, sheet_name=sheet_name, index_col=0)
 
     df.columns = [str(c).strip() for c in df.columns]
     df.index = [str(i).strip() for i in df.index]

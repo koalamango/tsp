@@ -44,30 +44,49 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple
 # Third-party imports
 import pandas as pd
 
+PROJECT_ROOT = Path(__file__).resolve().parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 # Project modules
-from nearest_neighbour import (
-    build_euclidean_matrix,
-    read_cities,
+from algorithm.heuristics.nearest_neighbour import (
+    exact_route,
     nearest_neighbour,
     route_length,
-    exact_route,
 )
-from two_opt import two_opt
-from three_opt import three_opt
-from metaheuristic import (
+from utils.tsp_data import (
+    build_euclidean_matrix,
+    load_tsp_data,
+    read_cities,
+)
+from algorithm.heuristics.two_opt import two_opt
+from algorithm.heuristics.three_opt import three_opt
+from algorithm.metaheuristics.metaheuristic import (
+    SA_ACCEPT_PROB,
+    SA_CALIBRATION_SAMPLES,
+    SA_FINAL_TEMP_RATIO,
+    SA_ITER_FACTOR,
+    SA_MIN_ITER,
     SAParams,
-    calculate_two_opt_delta,
+    calibrate_initial_temperature,
+    sa_parameters_for,
     solve_tsp_sa,
     solve_tsp_aco,
 )
-from brute_force_visualized import run_brute_force
-from branch_and_bound import run_branch_and_bound
-from tsp_charts import (
+from algorithm.exact.brute_force_visualized import run_brute_force
+from algorithm.exact.branch_and_bound import run_branch_and_bound
+from utils.tsp_charts import (
     save_distance_bar_chart,
     save_runtime_bar_chart,
     save_scaling_line_chart,
 )
-from tsp_utils import format_duration, format_gap, markdown_table, pluralize
+from utils.tsp_utils import (
+    format_duration,
+    format_gap,
+    format_route,
+    markdown_table,
+    pluralize,
+)
 
 DEFAULT_RUNS = 10
 DEFAULT_SEED = 42
@@ -77,21 +96,14 @@ CHARTS_DIRNAME = "charts"  # Sub-folder of outputs/ holding the PNG charts linke
 
 # Default Cartesian datasets evaluated in sequence: (filepath, run_brute_force_and_bb)
 CARTESIAN_SUITES: List[Tuple[str, bool]] = [
-    ("data/cities_10_cartesian.xlsx", True),
-    ("data/cities_20_cartesian.xlsx", False),
-    ("data/cities_40_cartestian.xlsx", False),
-    ("data/cities_80_cartesian.xlsx", False),
+    ("data/coordinates_10_cities.xlsx", True),
+    ("data/coordinates_20_cities.xlsx", False),
+    ("data/coordinates_40_cities.xlsx", False),
+    ("data/coordinates_80_cities.xlsx", False),
 ]
 
 # A stochastic run "hits the optimum" when it is within this distance of the MILP optimum.
 OPT_TOLERANCE = 1e-6
-
-# Simulated Annealing parameter scaling (see sa_parameters_for).
-SA_MIN_ITER = 8000          # Never use fewer iterations than the original fixed budget
-SA_ITER_FACTOR = 50         # max_iter = SA_ITER_FACTOR * n^2 (2-opt neighbourhood is ~n^2 / 2 moves)
-SA_ACCEPT_PROB = 0.8        # Initial acceptance probability of an average uphill move
-SA_FINAL_TEMP_RATIO = 1e-3  # Final temperature as a fraction of the initial temperature
-SA_CALIBRATION_SAMPLES = 200
 
 NN_FOOTNOTE = (
     "† Time includes building the Nearest Neighbour starting tour (2-Opt and 3-Opt cannot "
@@ -118,15 +130,6 @@ def estimate_exact_times(n: int) -> Tuple[str, str, int]:
         bb_seconds = 2.17 * (2.8 ** (n - 12))
 
     return format_duration(bf_seconds), format_duration(bb_seconds), perms
-
-
-def format_route(route: List[int], cities: List[str], max_display: Optional[int] = 7) -> str:
-    """Format an index route into a readable city name string."""
-    names = [cities[idx] for idx in route]
-    if max_display is None or len(names) <= max_display + 2:
-        return " -> ".join(names)
-    half = max_display // 2
-    return " -> ".join(names[:half]) + " -> ... -> " + " -> ".join(names[-half:])
 
 
 def slugify(text: str) -> str:
@@ -258,47 +261,11 @@ class SuiteSummary:
     suite_name: str
     n_cities: int
     results: List[BenchmarkResult]
+    slug: str = ""
 
 
-def calibrate_initial_temperature(dist_matrix: List[List[float]], seed: int) -> float:
-    """Choose a Simulated Annealing start temperature from the dataset's own distance scale.
-
-    Samples random 2-opt moves on a random tour and picks T0 so that an average
-    uphill move is accepted with probability SA_ACCEPT_PROB (Metropolis criterion).
-    """
-    n = len(dist_matrix)
-    rng = random.Random(seed)  # Local RNG: does not disturb the global seeds used by SA/ACO
-    route = [0] + rng.sample(range(1, n), n - 1) + [0]
-
-    uphill: List[float] = []
-    for _ in range(SA_CALIBRATION_SAMPLES):
-        i, j = sorted(rng.sample(range(1, n), 2))
-        delta = calculate_two_opt_delta(route, dist_matrix, i, j)
-        if delta > 0:
-            uphill.append(delta)
-
-    if not uphill:
-        return 1.0
-    return -statistics.fmean(uphill) / math.log(SA_ACCEPT_PROB)
 
 
-def sa_parameters_for(dist_matrix: List[List[float]], seed: int) -> SAParams:
-    """Scale Simulated Annealing parameters to the problem size.
-
-    The original fixed settings (t_init=500, alpha=0.997, max_iter=8000) froze after
-    ~2,000 iterations and gave far too few moves for larger instances, so:
-      * max_iter grows with n^2 (the 2-opt neighbourhood has ~n^2 / 2 moves),
-      * t_init is calibrated from the data (see calibrate_initial_temperature),
-      * alpha is fitted so the temperature cools to SA_FINAL_TEMP_RATIO * t_init
-        exactly at the last iteration, i.e. cooling spans the whole run.
-    """
-    n = len(dist_matrix)
-    max_iter = max(SA_MIN_ITER, SA_ITER_FACTOR * n * n)
-    if n < 3:  # Too few cities for 2-opt moves; SA is trivial here
-        return SAParams(t_init=1.0, alpha=0.997, max_iter=max_iter)
-    t_init = calibrate_initial_temperature(dist_matrix, seed)
-    alpha = SA_FINAL_TEMP_RATIO ** (1.0 / max_iter)
-    return SAParams(t_init=t_init, alpha=alpha, max_iter=max_iter)
 
 
 def run_benchmarks(
@@ -428,7 +395,13 @@ def run_benchmarks(
         ("[3/6] 2-Opt Refinement", "2-Opt (from NN)", solve_from_nn(two_opt), True, True),
         ("[4/6] 3-Opt Refinement", "3-Opt (from NN)", solve_from_nn(three_opt), True, True),
         ("[5/6] Simulated Annealing", "Simulated Annealing",
-         solve_metaheuristic(solve_tsp_sa, t_init=sa_cfg.t_init, alpha=sa_cfg.alpha, max_iter=sa_cfg.max_iter),
+         solve_metaheuristic(
+             solve_tsp_sa,
+             t_init=sa_cfg.t_init,
+             alpha=sa_cfg.alpha,
+             max_iter=sa_cfg.max_iter,
+             record_history=False,
+         ),
          False, False),
         ("[6/6] Ant Colony Optimization", "Ant Colony Opt.",
          solve_metaheuristic(solve_tsp_aco, n_ants=20, n_iter=150), False, False),
@@ -439,10 +412,21 @@ def run_benchmarks(
 
     # Optional: Brute Force & Branch and Bound
     if run_bf:
-        initial_bound = opt_distance if opt_distance is not None else min(r.distance for r in results)
+        # Branch and Bound starts from the Nearest Neighbour heuristic upper bound
+        nn_step = next((r for r in results if r.algorithm == "Nearest Neighbour"), None)
+        if nn_step is not None:
+            initial_bb_route = nn_step.best_run.route
+            initial_bb_bound = nn_step.distance
+        else:
+            initial_bb_route, _ = nearest_neighbour(dist_matrix)
+            initial_bb_bound = route_length(initial_bb_route, dist_matrix)
 
         def solve_bb(_run_idx: int) -> Tuple[List[int], str]:
-            bb_res = run_branch_and_bound(dist_matrix, initial_upper_bound=initial_bound)
+            bb_res = run_branch_and_bound(
+                dist_matrix,
+                initial_upper_bound=initial_bb_bound,
+                initial_route=initial_bb_route,
+            )
             return bb_res["route"], f"{bb_res['branches_pruned']:,} pruned"
 
         bonus_steps = [
@@ -463,6 +447,7 @@ def write_runs_csv(
     suite_name: str,
     results: List[BenchmarkResult],
     outputs_dir: Path = Path("outputs"),
+    slug: Optional[str] = None,
 ) -> Path:
     """Export every timed run (warm-ups excluded) to CSV for analysis in Excel / pandas."""
     outputs_dir.mkdir(parents=True, exist_ok=True)
@@ -480,7 +465,8 @@ def write_runs_csv(
     ]
     df = pd.DataFrame(rows)
     df["seed"] = df["seed"].astype("Int64")  # Blank (not 42.0) for deterministic algorithms
-    csv_file = outputs_dir / f"tsp_loader_{slugify(suite_name)}_runs.csv"
+    safe_name = slugify(slug if slug else suite_name)
+    csv_file = outputs_dir / f"tsp_loader_{safe_name}_runs.csv"
     df.to_csv(csv_file, index=False)
     return csv_file
 
@@ -496,10 +482,11 @@ def write_suite_charts(
     cities: List[str],
     results: List[BenchmarkResult],
     outputs_dir: Path = Path("outputs"),
+    slug: Optional[str] = None,
 ) -> Tuple[Path, Path]:
     """Render the runtime and best/mean/worst-distance bar charts for one dataset."""
     charts_dir = outputs_dir / CHARTS_DIRNAME
-    safe_name = slugify(suite_name)
+    safe_name = slugify(slug if slug else suite_name)
     n, runs = len(cities), len(results[0].runs)
     runs_label = pluralize(runs)
     labels = [r.display_name for r in results]
@@ -528,12 +515,13 @@ def write_markdown_report(
     seed: int = DEFAULT_SEED,
     sa_params: Optional[SAParams] = None,
     outputs_dir: Path = Path("outputs"),
+    slug: Optional[str] = None,
 ) -> Path:
     """Format benchmark results into a Markdown report and save to disk."""
     n = len(cities)
     runs_label = pluralize(runs)
     outputs_dir.mkdir(parents=True, exist_ok=True)
-    safe_name = slugify(suite_name)
+    safe_name = slugify(slug if slug else suite_name)
     any_nn_footnote = any(r.includes_nn_time for r in results)
     footnote_lines = ["", NN_FOOTNOTE] if any_nn_footnote else []
 
@@ -604,7 +592,9 @@ def write_markdown_report(
             f"alpha={sa_cfg.alpha:.6f}, max_iter={int(sa_cfg.max_iter):,} (scaled to n = {n})"
         ]
 
-    runtime_png, distance_png = write_suite_charts(suite_name, cities, results, outputs_dir)
+    runtime_png, distance_png = write_suite_charts(
+        suite_name, cities, results, outputs_dir, slug=safe_name
+    )
     chart_lines = [
         "## Charts",
         "",
@@ -731,7 +721,7 @@ def write_scalability_report(
     )
 
     dataset_lines = [
-        f"- **{n} cities:** [{s.suite_name}](tsp_loader_{slugify(s.suite_name)}_results.md)"
+        f"- **{n} cities:** [{s.suite_name}](tsp_loader_{s.slug or slugify(s.suite_name)}_results.md)"
         for n, s in by_size.items()
     ]
     if has_gap:
@@ -782,9 +772,11 @@ def evaluate_suite(
     run_bf: bool = True,
     runs: int = DEFAULT_RUNS,
     seed: int = DEFAULT_SEED,
+    slug: Optional[str] = None,
 ) -> SuiteSummary:
     """Execute each TSP algorithm on the given problem instance and report results."""
     print(f"\nEvaluating: {suite_name} ({len(cities)} cities, {pluralize(runs)} each)")
+    safe_name = slugify(slug if slug else suite_name)
     sa_params = sa_parameters_for(dist_matrix, seed)
     results = run_benchmarks(
         cities,
@@ -796,19 +788,19 @@ def evaluate_suite(
         sa_params=sa_params,
     )
     report_file = write_markdown_report(
-        suite_name, cities, results, runs=runs, seed=seed, sa_params=sa_params,
+        suite_name, cities, results, runs=runs, seed=seed, sa_params=sa_params, slug=safe_name,
     )
-    csv_file = write_runs_csv(suite_name, results)
+    csv_file = write_runs_csv(suite_name, results, slug=safe_name)
     print(f"  -> Report written: {report_file}")
     print(f"  -> Charts written: {report_file.parent / CHARTS_DIRNAME}")
     print(f"  -> Raw runs written: {csv_file}")
-    return SuiteSummary(suite_name=suite_name, n_cities=len(cities), results=results)
+    return SuiteSummary(suite_name=suite_name, n_cities=len(cities), results=results, slug=safe_name)
 
 
 def load_cartesian_suite(filepath: str) -> Tuple[List[str], List[List[float]]]:
-    """Load city names and build a Euclidean distance matrix from a Cartesian Excel file."""
-    cities, points = read_cities(filepath)
-    return cities, build_euclidean_matrix(points)
+    """Load city names and distance matrix from an Excel file (Cartesian coordinates or distance matrix)."""
+    cities, dist_matrix, _ = load_tsp_data(filepath)
+    return cities, dist_matrix
 
 
 def positive_int(value: str) -> int:
@@ -825,6 +817,12 @@ def positive_int(value: str) -> int:
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Unified TSP algorithm runner and benchmark suite."
+    )
+    parser.add_argument(
+        "datasets",
+        nargs="*",
+        help="Optional dataset filepaths to evaluate (e.g. data/coordinates_10_cities.xlsx). "
+             "If omitted, runs the default Cartesian suite.",
     )
     parser.add_argument(
         "--no-exact",
@@ -847,20 +845,30 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    target_files = args.datasets if args.datasets else [fp for fp, _ in CARTESIAN_SUITES]
+
     summaries: List[SuiteSummary] = []
-    for filepath, run_bf in CARTESIAN_SUITES:
+    for filepath in target_files:
         path = Path(filepath)
+        if not path.exists():
+            path = PROJECT_ROOT / filepath
         if path.exists():
-            cities, dist_matrix = load_cartesian_suite(filepath)
+            cities, dist_matrix, dataset_type = load_tsp_data(str(path))
+            n = len(cities)
+            # Brute-force & branch-and-bound are exact exhaustive searches feasible only for small instances (n <= 10)
+            run_bf = n <= 10
             summaries.append(evaluate_suite(
-                f"Cartesian Coordinates ({len(cities)} Cities) - {path.name}",
+                f"{dataset_type} ({n} Cities) - {path.name}",
                 cities,
                 dist_matrix,
                 run_exact=not args.no_exact,
                 run_bf=run_bf,
                 runs=args.runs,
                 seed=args.seed,
+                slug=path.stem,
             ))
+        else:
+            print(f"Warning: Dataset file not found: {filepath}", file=sys.stderr)
 
     if len({s.n_cities for s in summaries}) >= 2:
         scalability_file = write_scalability_report(summaries, runs=args.runs, seed=args.seed)

@@ -1,4 +1,6 @@
 """
+Author: Jessie W
+
 tsp_charts.py - Matplotlib chart helpers for the tsp_loader and metaheuristic reports.
 
 All functions take plain Python data (labels, numbers, and result dictionaries) so this
@@ -9,14 +11,19 @@ image paths.
 from __future__ import annotations
 
 from pathlib import Path
+import sys
 from typing import Dict, List, Optional, Sequence, Tuple
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 import matplotlib
 
 matplotlib.use("Agg")  # Headless: charts are written to files, never shown in a window
 import matplotlib.pyplot as plt  # noqa: E402
 
-from tsp_utils import format_duration
+from utils.tsp_utils import format_duration
 
 # (min, mean, max) of a series of measurements
 Triple = Tuple[float, float, float]
@@ -33,6 +40,7 @@ _GRID_ALPHA = 0.3
 
 
 def _save(fig, path: Path) -> Path:
+    """Utility function to save a created chart to disk."""
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=150, bbox_inches="tight")
     plt.close(fig)

@@ -1,21 +1,24 @@
 """
 Author: Oshanda Hembathanthrige
 
-Keep this file in the SAME FOLDER as nearest_neighbour.py.
-
-Run: py branch_and_bound.py "C:/path/cities.xlsx"
+Run: python algorithm/exact/branch_and_bound.py "data/coordinates_10_cities.xlsx"
 
 Solves the TSP using exact Branch and Bound with partial-tour pruning.
-It imports shared functions from nearest_neighbour.py.
+It imports shared functions from algorithm/heuristics/nearest_neighbour.py.
 """
 from __future__ import annotations
 
 import math
+from pathlib import Path
 import sys
 import time
 from typing import Dict, List, Optional
 
-from nearest_neighbour import (
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from algorithm.heuristics.nearest_neighbour import (
     build_euclidean_matrix,
     read_cities,
     nearest_neighbour,
@@ -27,6 +30,7 @@ from nearest_neighbour import (
 def branch_and_bound(
     distances: List[List[float]],
     initial_upper_bound: Optional[float] = None,
+    initial_route: Optional[List[int]] = None,
 ):
     """Exact branch-and-bound solver with partial-tour pruning.
 
@@ -40,7 +44,7 @@ def branch_and_bound(
         for i in range(n)
     ]
 
-    best_route = None
+    best_route = list(initial_route) if initial_route is not None else None
     best_dist = initial_upper_bound if initial_upper_bound is not None else float("inf")
     complete_routes = 0
     branches_pruned = 0
@@ -57,7 +61,10 @@ def branch_and_bound(
         if count == n:
             total_cost = current_cost + distances[curr_city][0]
             complete_routes += 1
-            if total_cost < best_dist:
+            if total_cost < best_dist - 1e-9:
+                best_dist = total_cost
+                best_route = list(current_path) + [0]
+            elif best_route is None and total_cost <= best_dist + 1e-9:
                 best_dist = total_cost
                 best_route = list(current_path) + [0]
             return
@@ -95,12 +102,14 @@ def branch_and_bound(
 def run_branch_and_bound(
     dist_matrix: List[List[float]],
     initial_upper_bound: Optional[float] = None,
+    initial_route: Optional[List[int]] = None,
 ) -> Dict:
     """Run Branch and Bound and return benchmark metrics."""
     t_start = time.perf_counter()
     best_route, best_dist, complete_routes, branches_pruned = branch_and_bound(
         dist_matrix,
         initial_upper_bound=initial_upper_bound,
+        initial_route=initial_route,
     )
     exec_time = time.perf_counter() - t_start
 

@@ -1,9 +1,7 @@
 """
 Author: Richard Clark
 
-Keep this file beside the latest nearest_neighbour.py.
-
-Run: py three_opt.py "C:/path/cities.xlsx"
+Run: python algorithm/heuristics/three_opt.py "data/coordinates_20_cities.xlsx"
 Dependencies: py -m pip install openpyxl scipy
 Creates an NN starting route, improves it with 3-opt, and writes a Markdown
 report into the outputs folder. Rerunning replaces this algorithm's report.
@@ -12,14 +10,18 @@ import sys
 from pathlib import Path
 from time import perf_counter
 
-from nearest_neighbour import (
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from algorithm.heuristics.nearest_neighbour import (
     build_euclidean_matrix,
     read_cities,
     nearest_neighbour,
     route_length,
     exact_route,
 )
-from tsp_utils import markdown_table
+from utils.tsp_utils import markdown_table
 
 
 def reconnect(tour, i, j, k, case):
@@ -42,7 +44,7 @@ def reconnect(tour, i, j, k, case):
     return result[start:] + result[:start]
 
 
-def three_opt(route, distances):
+def three_opt(route, distances, on_move=None):
     """Best-improvement 3-opt for symmetric distances.
 
     Test seven reconnections of every triple of distinct tour edges.
@@ -81,8 +83,11 @@ def three_opt(route, distances):
                             best_move = (i, j, k, case)
         if best_move is None:
             return tour + [0], checks, passes, moves
+        before = tour + [0]
         tour = reconnect(tour, *best_move)
         moves += 1
+        if on_move is not None:
+            on_move(before, tour + [0], moves)
 
 
 def main(file_path):
@@ -176,7 +181,7 @@ def main(file_path):
     lines += ['', '## Optimal visiting order', '']
     lines += [f'{step}. {cities[city]}' for step, city in enumerate(optimal_route, 1)]
     spreadsheet = Path(file_path)
-    outputs_dir = Path('outputs')
+    outputs_dir = PROJECT_ROOT / 'outputs'
     outputs_dir.mkdir(parents=True, exist_ok=True)
     output = outputs_dir / f'{spreadsheet.stem}_three_opt_results.md'
     output.write_text('\n'.join(lines) + '\n', encoding='utf-8')

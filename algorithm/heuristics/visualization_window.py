@@ -1,4 +1,7 @@
-"""Fit Matplotlib windows to the available screen on Tk and Qt backends."""
+"""
+Author: Richard Clark
+
+Fit Matplotlib windows to the available screen on Tk and Qt backends."""
 
 
 def wait_for_click(figure):

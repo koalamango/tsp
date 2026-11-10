@@ -4,12 +4,21 @@ Author: Oshanda Hembathanthrige
 Load and validate Cartesian coordinates and compute distance matrices from Excel.
 """
 # run this in terminal to install the required packages: py -m pip install pandas openpyxl
+from pathlib import Path
 import pandas as pd
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 # Read an Excel sheet with columns (Location, X, Y). Returns (coordinates, cities, distances), decimals=0 for easy computation.
 def load_distances(path, sheet_name=0, decimals=0):
+    resolved_path = Path(path)
+    if not resolved_path.exists():
+        for candidate in (PROJECT_ROOT / path, PROJECT_ROOT / "data" / path):
+            if candidate.exists():
+                resolved_path = candidate
+                break
     try:
-        data_frame = pd.read_excel(path, sheet_name=sheet_name)
+        data_frame = pd.read_excel(resolved_path, sheet_name=sheet_name)
     except FileNotFoundError:
         raise FileNotFoundError(f"File '{path}' not found. Check the name and folder, then try again.")
     # Remove completely empty rows

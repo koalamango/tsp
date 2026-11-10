@@ -4,9 +4,9 @@ Author: Jessie W
 Metaheuristic TSP algorithms: Simulated Annealing and Ant Colony Optimization.
 
 Can be imported as a library or executed directly from the command line:
-    python metaheuristic.py
-    python metaheuristic.py data/cities_20_cartesian.xlsx
-    python metaheuristic.py data/distances_20_cities.xlsx --seed 42
+    python algorithm/metaheuristics/metaheuristic.py
+    python algorithm/metaheuristics/metaheuristic.py data/coordinates_20_cities.xlsx
+    python algorithm/metaheuristics/metaheuristic.py data/distances_20_cities.xlsx --seed 42
 
 Running the script automatically executes both metaheuristics, calculates the exact
 global optimum using the project's HiGHS MILP solver with DFJ subtour cuts, plots
@@ -17,32 +17,42 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+import math
 from pathlib import Path
 import random
+import statistics
 import sys
 import time
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
-import pandas as pd
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 # Project modules for exact baseline comparison, greedy initialization, charts, and formatting
-from nearest_neighbour import (
+from algorithm.heuristics.nearest_neighbour import exact_route, nearest_neighbour, route_length
+from utils.tsp_charts import save_convergence_chart
+from utils.tsp_data import (
     build_euclidean_matrix,
-    exact_route,
-    nearest_neighbour,
+    load_distance_excel,
+    load_tsp_data,
     read_cities,
-    route_length,
 )
-from tsp_charts import save_convergence_chart
-from tsp_utils import format_gap, markdown_table
+from utils.tsp_utils import format_gap, format_tour_list, markdown_table
 
 
-class _ConfigMixin:
-    """Shared factory helper for converting optional dicts or instances into a dataclass."""
+@dataclass(frozen=True)
+class SAParams:
+    """Hyperparameters for Simulated Annealing."""
+    t_init: float = 500.0
+    alpha: float = 0.997
+    max_iter: int = 8000
+    seed: Optional[int] = None
 
     @classmethod
-    def from_config(cls, config: Optional[Union["_ConfigMixin", Dict]]):
+    def from_config(cls, config: Optional[Union["SAParams", Dict]]) -> "SAParams":
         if isinstance(config, cls):
             return config
         if isinstance(config, dict):
@@ -50,17 +60,21 @@ class _ConfigMixin:
         return cls()
 
 
-@dataclass(frozen=True)
-class SAParams(_ConfigMixin):
-    """Hyperparameters for Simulated Annealing."""
-    t_init: float = 500.0
-    alpha: float = 0.997
-    max_iter: int = 8000
-    seed: Optional[int] = None
+@dataclass
+class SAFrame:
+    """Single snapshot of Simulated Annealing state for animation playback."""
+    iteration: int
+    temperature: float
+    curr_route: List[int]
+    curr_dist: float
+    best_route: List[int]
+    best_dist: float
+    accepted_moves: int
+    improved_moves: int
 
 
 @dataclass(frozen=True)
-class ACOParams(_ConfigMixin):
+class ACOParams:
     """Hyperparameters for Ant Colony Optimization."""
     n_ants: int = 20
     n_iter: int = 150
@@ -71,156 +85,21 @@ class ACOParams(_ConfigMixin):
     e_weight: float = 5.0
     seed: Optional[int] = None
 
-
-def resolve_sa_schedule(
-    t_init: Optional[float],
-    alpha: Optional[float],
-    max_iter: int,
-    use_nn_seed: bool = True,
-) -> Tuple[float, float]:
-    """Resolve default initial temperature and cooling rate for Simulated Annealing."""
-    resolved_t_init = t_init if t_init is not None else (30.0 if use_nn_seed else 500.0)
-    if alpha is not None:
-        resolved_alpha = alpha
-    else:
-        t_final = 0.01
-        resolved_alpha = (t_final / resolved_t_init) ** (1.0 / max_iter) if max_iter > 0 else 0.997
-    return resolved_t_init, resolved_alpha
+    @classmethod
+    def from_config(cls, config: Optional[Union["ACOParams", Dict]]) -> "ACOParams":
+        if isinstance(config, cls):
+            return config
+        if isinstance(config, dict):
+            return cls(**{k: v for k, v in config.items() if k in cls.__dataclass_fields__})
+        return cls()
 
 
-# 1. DATA LOADERS (Excel Distance Matrix or Cartesian Coordinates)
-
-def load_distance_excel(path: str, sheet_name: int = 0) -> Tuple[List[str], List[List[float]]]:
-    """Loads symmetric distance matrix from team's Excel template."""
-    df = pd.read_excel(path, sheet_name=sheet_name, index_col=0)
-    df.columns = [str(c).strip() for c in df.columns]
-    df.index = [str(i).strip() for i in df.index]
-    cities = list(df.columns)
-    n = len(cities)
-    dist_matrix = [[0.0] * n for _ in range(n)]
-
-    for i, a in enumerate(cities):
-        for j, b in enumerate(cities):
-            val = df.loc[a, b]
-            if a != b and not pd.isna(val):
-                d = float(val)
-                dist_matrix[i][j] = d
-                dist_matrix[j][i] = d
-    return cities, dist_matrix
-
-
-def load_tsp_data(path: str, sheet_name: int = 0) -> Tuple[List[str], List[List[float]], str]:
-    """
-    Auto-detects and loads either Cartesian coordinates (cities_*.xlsx)
-    or symmetric distance matrices (distances_*.xlsx).
-
-    Returns (cities, dist_matrix, dataset_type), where dataset_type is
-    'Cartesian coordinates' or 'Symmetric distance matrix'.
-    """
-    file_path = Path(path)
-    if not file_path.exists():
-        raise FileNotFoundError(f"TSP data file not found: {file_path}")
-
-    try:
-        cities, points = read_cities(str(file_path))
-        return cities, build_euclidean_matrix(points), "Cartesian coordinates"
-    except ValueError:
-        cities, dist_matrix = load_distance_excel(str(file_path), sheet_name=sheet_name)
-        return cities, dist_matrix, "Symmetric distance matrix"
-
-
-# 2. SIMULATED ANNEALING (SA)
-
-def solve_tsp_sa(
-    dist_matrix: List[List[float]],
-    t_init: Optional[float] = None,
-    alpha: Optional[float] = None,
-    max_iter: int = 8000,
-    seed: int = None,
-    use_nn_seed: bool = True,
-    initial_route: Optional[List[int]] = None,
-) -> Dict:
-    """
-    Solves TSP using Simulated Annealing with hybrid 2-opt and swap neighbourhoods.
-
-    Tuned Schedule:
-      - Initial Temperature (t_init): Defaults to 30.0 when using Nearest Neighbour seeding
-        (or 500.0 for random starts). This prevents high-temperature thermal vaporization
-        of the high-quality greedy tour structure.
-      - Cooling Rate (alpha): When None, automatically computed so that temperature cools
-        smoothly from t_init to T_final = 0.01 at max_iter:
-            alpha = (0.01 / t_init) ** (1.0 / max_iter)
-        This ensures active, productive annealing across the entire iteration budget without
-        premature freezing.
-    """
-    if seed is not None:
-        random.seed(seed)
-        np.random.seed(seed)
-
-    n = len(dist_matrix)
-    if initial_route is not None:
-        curr_route = list(initial_route)
-        if curr_route and curr_route[0] != curr_route[-1]:
-            curr_route.append(curr_route[0])
-    elif use_nn_seed:
-        nn_tour, _ = nearest_neighbour(dist_matrix)
-        curr_route = list(nn_tour)
-    else:
-        curr_route = [0] + random.sample(range(1, n), n - 1) + [0]
-
-    curr_dist = route_length(curr_route, dist_matrix)
-    initial_dist = curr_dist
-    best_route, best_dist = list(curr_route), curr_dist
-
-    # Apply Tuned Annealing Schedule
-    t_init, alpha = resolve_sa_schedule(t_init, alpha, max_iter, use_nn_seed)
-
-    temp = t_init
-    history = []
-    time_history = []
-    conv_iter = 0
-    conv_time = 0.0
-    t_start = time.perf_counter()
-
-    for it in range(1, max_iter + 1):
-        i, j = sorted(random.sample(range(1, n), 2))
-        is_2opt = random.random() < 0.7
-
-        if is_2opt:
-            delta = calculate_two_opt_delta(curr_route, dist_matrix, i, j)
-        else:
-            delta = calculate_city_swap_delta(curr_route, dist_matrix, i, j)
-
-        # Metropolis acceptance criterion
-        if delta < 0 or random.random() < np.exp(-delta / temp):
-            if is_2opt:
-                curr_route[i:j + 1] = curr_route[i:j + 1][::-1]
-            else:
-                curr_route[i], curr_route[j] = curr_route[j], curr_route[i]
-            curr_dist += delta
-            if curr_dist < best_dist - 1e-9:
-                best_route = list(curr_route)
-                best_dist = route_length(best_route, dist_matrix)
-                curr_dist = best_dist
-                conv_iter = it
-                conv_time = time.perf_counter() - t_start
-
-        temp *= alpha
-        now = time.perf_counter() - t_start
-        history.append(best_dist)
-        time_history.append(now)
-
-    exec_time = time.perf_counter() - t_start
-    return {
-        "route": best_route,
-        "distance": best_dist,
-        "initial_distance": initial_dist,
-        "time_sec": exec_time,
-        "history": history,
-        "time_history": time_history,
-        "convergence_iter": conv_iter,
-        "conv_time_sec": conv_time,
-    }
+# Simulated Annealing hyperparameter scaling constants
+SA_MIN_ITER = 8000          # Baseline minimum iteration budget
+SA_ITER_FACTOR = 50         # max_iter = SA_ITER_FACTOR * n^2 (~n^2 / 2 moves in 2-opt neighborhood)
+SA_ACCEPT_PROB = 0.8        # Initial acceptance probability of an average uphill move
+SA_FINAL_TEMP_RATIO = 1e-3  # Final temperature as a fraction of initial temperature
+SA_CALIBRATION_SAMPLES = 200
 
 
 def calculate_city_swap_delta(
@@ -229,6 +108,11 @@ def calculate_city_swap_delta(
     i: int,
     j: int,
 ) -> float | int:
+    """
+    Calculate the impact of swapping two cities on the route length.
+
+    A positive number returned indicates the new route is longer, a negative number indicates the new route is shorter.
+    """
     prev_i = curr_route[i - 1]
     next_i = curr_route[i + 1]
     prev_j = curr_route[j - 1]
@@ -254,6 +138,11 @@ def calculate_two_opt_delta(
     i: int,
     j: int,
 ) -> float | int:
+    """
+    Calculate the impact of swapping two paths on the route length.
+
+    A positive number returned indicates the new route is longer, a negative number indicates the new route is shorter.
+    """
     u_prev_i = curr_route[i - 1]
     u_i = curr_route[i]
     u_j = curr_route[j]
@@ -262,6 +151,249 @@ def calculate_two_opt_delta(
         dist_matrix[u_prev_i][u_j] + dist_matrix[u_i][u_next_j]
         - dist_matrix[u_prev_i][u_i] - dist_matrix[u_j][u_next_j]
     )
+
+
+def calibrate_initial_temperature(
+    dist_matrix: List[List[float]],
+    seed: Optional[int] = None,
+    accept_prob: float = SA_ACCEPT_PROB,
+    samples: int = SA_CALIBRATION_SAMPLES,
+) -> float:
+    """Choose a Simulated Annealing start temperature from the dataset's own distance scale.
+
+    Samples random 2-opt moves on a random tour and picks T0 so that an average
+    uphill move is accepted with probability accept_prob (Metropolis criterion).
+    """
+    n = len(dist_matrix)
+    if n < 3:
+        return 1.0
+    rng = random.Random(seed) if seed is not None else random.Random()
+    route = [0] + rng.sample(range(1, n), n - 1) + [0]
+
+    uphill: List[float] = []
+    for _ in range(samples):
+        i, j = sorted(rng.sample(range(1, n), 2))
+        delta = calculate_two_opt_delta(route, dist_matrix, i, j)
+        if delta > 0:
+            uphill.append(delta)
+
+    if not uphill:
+        return 1.0
+    return -statistics.fmean(uphill) / math.log(accept_prob)
+
+
+def sa_parameters_for(dist_matrix: List[List[float]], seed: Optional[int] = None) -> SAParams:
+    """Scale Simulated Annealing parameters to problem instance size.
+
+    Schedule scaling:
+      - max_iter grows quadratically with n^2 (~n^2 / 2 moves in 2-opt neighborhood).
+      - t_init is calibrated from the dataset's distance scale.
+      - alpha cools to SA_FINAL_TEMP_RATIO * t_init across the full max_iter budget.
+    """
+    n = len(dist_matrix)
+    max_iter = max(SA_MIN_ITER, SA_ITER_FACTOR * n * n)
+    if n < 3:
+        return SAParams(t_init=1.0, alpha=0.997, max_iter=max_iter, seed=seed)
+    t_init = calibrate_initial_temperature(dist_matrix, seed)
+    alpha = SA_FINAL_TEMP_RATIO ** (1.0 / max_iter)
+    return SAParams(t_init=t_init, alpha=alpha, max_iter=max_iter, seed=seed)
+
+
+def resolve_sa_schedule(
+    t_init: Optional[float],
+    alpha: Optional[float],
+    max_iter: int,
+    use_nn_seed: bool = True,
+    dist_matrix: Optional[List[List[float]]] = None,
+    seed: Optional[int] = None,
+) -> Tuple[float, float]:
+    """Resolve default initial temperature and cooling rate for Simulated Annealing."""
+    if t_init is not None:
+        resolved_t_init = t_init
+    elif use_nn_seed:
+        resolved_t_init = 30.0
+    elif dist_matrix is not None:
+        resolved_t_init = calibrate_initial_temperature(dist_matrix, seed=seed)
+    else:
+        resolved_t_init = 500.0
+
+    if alpha is not None:
+        resolved_alpha = alpha
+    else:
+        if use_nn_seed:
+            t_final = 0.01
+            resolved_alpha = (t_final / resolved_t_init) ** (1.0 / max_iter) if max_iter > 0 else 0.997
+        else:
+            t_final_ratio = 1e-3
+            resolved_alpha = t_final_ratio ** (1.0 / max_iter) if max_iter > 0 else 0.997
+    return resolved_t_init, resolved_alpha
+
+
+# 2. SIMULATED ANNEALING (SA)
+
+def solve_tsp_sa(
+    dist_matrix: List[List[float]],
+    t_init: Optional[float] = None,
+    alpha: Optional[float] = None,
+    max_iter: int = 8000,
+    seed: Optional[int] = None,
+    use_nn_seed: bool = True,
+    initial_route: Optional[List[int]] = None,
+    record_snapshots: bool = False,
+    max_frames: int = 250,
+    record_history: bool = True,
+) -> Dict:
+    """
+    Solves TSP using Simulated Annealing with hybrid 2-opt and swap neighbourhoods.
+
+    Supports both high-throughput headless benchmarking (record_history=False,
+    record_snapshots=False) and rich trajectory recording for convergence plotting
+    (record_history=True) or interactive animated visualization (record_snapshots=True).
+
+    Tuned Schedule:
+      - Initial Temperature (t_init): Defaults to 30.0 when using Nearest Neighbour seeding
+        (or calibrated to problem distance scale / 500.0 for random starts). This prevents
+        high-temperature thermal vaporization of greedy tour structures.
+      - Cooling Rate (alpha): When None, automatically computed so that temperature cools
+        smoothly across the entire max_iter budget without premature freezing.
+    """
+    if seed is not None:
+        random.seed(seed)
+        np.random.seed(seed)
+
+    if record_snapshots:
+        record_history = True
+
+    n = len(dist_matrix)
+    if initial_route is not None:
+        curr_route = list(initial_route)
+        if curr_route and curr_route[0] != curr_route[-1]:
+            curr_route.append(curr_route[0])
+    elif use_nn_seed:
+        nn_tour, _ = nearest_neighbour(dist_matrix)
+        curr_route = list(nn_tour)
+    else:
+        curr_route = [0] + random.sample(range(1, n), n - 1) + [0]
+
+    curr_dist = route_length(curr_route, dist_matrix)
+    initial_dist = curr_dist
+    best_route, best_dist = list(curr_route), curr_dist
+
+    # Apply Tuned Annealing Schedule
+    t_init, alpha = resolve_sa_schedule(
+        t_init, alpha, max_iter, use_nn_seed=use_nn_seed, dist_matrix=dist_matrix, seed=seed
+    )
+
+    temp = t_init
+    history = []
+    time_history = []
+    curr_history: List[float] = []
+    temp_history: List[float] = []
+    raw_frames: List[SAFrame] = []
+    conv_iter = 0
+    conv_time = 0.0
+    accepted_moves = 0
+    improved_moves = 0
+    t_start = time.perf_counter()
+    now = 0.0
+
+    if record_snapshots:
+        raw_frames.append(
+            SAFrame(
+                iteration=0,
+                temperature=temp,
+                curr_route=list(curr_route),
+                curr_dist=curr_dist,
+                best_route=list(best_route),
+                best_dist=best_dist,
+                accepted_moves=0,
+                improved_moves=0,
+            )
+        )
+        sample_stride = max(1, max_iter // max_frames)
+    else:
+        sample_stride = 1
+
+    for it in range(1, max_iter + 1):
+        i, j = sorted(random.sample(range(1, n), 2))
+        is_2opt = random.random() < 0.7
+
+        if is_2opt:
+            delta = calculate_two_opt_delta(curr_route, dist_matrix, i, j)
+        else:
+            delta = calculate_city_swap_delta(curr_route, dist_matrix, i, j)
+
+        improved_this_step = False
+        # Metropolis acceptance criterion (fast math.exp with lower-bound clamped temperature)
+        if delta < 0 or random.random() < math.exp(-delta / max(temp, 1e-12)):
+            if is_2opt:
+                curr_route[i : j + 1] = curr_route[i : j + 1][::-1]
+            else:
+                curr_route[i], curr_route[j] = curr_route[j], curr_route[i]
+            curr_dist += delta
+            accepted_moves += 1
+
+            if curr_dist < best_dist - 1e-9:
+                best_route = list(curr_route)
+                best_dist = route_length(best_route, dist_matrix)
+                curr_dist = best_dist
+                conv_iter = it
+                conv_time = time.perf_counter() - t_start
+                improved_moves += 1
+                improved_this_step = True
+
+        temp *= alpha
+
+        if record_history:
+            if it % 10 == 0 or improved_this_step or it == max_iter:
+                now = time.perf_counter() - t_start
+            history.append(best_dist)
+            time_history.append(now)
+
+        if record_snapshots:
+            curr_history.append(curr_dist)
+            temp_history.append(temp)
+            if it % sample_stride == 0 or improved_this_step or it == max_iter:
+                raw_frames.append(
+                    SAFrame(
+                        iteration=it,
+                        temperature=temp,
+                        curr_route=list(curr_route),
+                        curr_dist=curr_dist,
+                        best_route=list(best_route),
+                        best_dist=best_dist,
+                        accepted_moves=accepted_moves,
+                        improved_moves=improved_moves,
+                    )
+                )
+
+    frames: List[SAFrame] = []
+    if record_snapshots:
+        if len(raw_frames) > max_frames:
+            indices = np.linspace(0, len(raw_frames) - 1, max_frames, dtype=int)
+            frames = [raw_frames[idx] for idx in indices]
+        else:
+            frames = raw_frames
+
+    exec_time = time.perf_counter() - t_start
+    result = {
+        "route": best_route,
+        "distance": best_dist,
+        "initial_distance": initial_dist,
+        "time_sec": exec_time,
+        "history": history,
+        "time_history": time_history,
+        "convergence_iter": conv_iter,
+        "conv_time_sec": conv_time,
+        "accepted_moves": accepted_moves,
+        "improved_moves": improved_moves,
+    }
+    if record_snapshots:
+        result["frames"] = frames
+        result["curr_history"] = curr_history
+        result["temp_history"] = temp_history
+
+    return result
 
 
 # 3. ANT COLONY OPTIMISATION (ACO)
@@ -554,17 +686,13 @@ def save_metaheuristic_report(
         "",
     ]
 
-    # Format tours
-    def format_tour_list(tour_indices: List[int]) -> List[str]:
-        return [f"{idx}. {cities[c]}" for idx, c in enumerate(tour_indices, 1)]
-
     if optimum_route:
         lines += [
             "### Proven Optimal Tour (HiGHS MILP)",
             "",
             f"**Distance:** `{optimum_dist:.6f}`",
             "",
-            *format_tour_list(optimum_route),
+            *format_tour_list(optimum_route, cities),
             "",
         ]
 
@@ -575,7 +703,7 @@ def save_metaheuristic_report(
             "",
             f"**Distance:** `{dist:.6f}` ({gap_str(dist)} vs. optimum)",
             "",
-            *format_tour_list(res["route"]),
+            *format_tour_list(res["route"], cities),
             "",
         ]
 
@@ -608,8 +736,8 @@ def main(argv: Optional[List[str]] = None) -> None:
     parser.add_argument(
         "dataset",
         nargs="?",
-        default="data/cities_20_cartesian.xlsx",
-        help="Path to TSP dataset (.xlsx Cartesian coordinates or symmetric distance matrix). Default: data/cities_20_cartesian.xlsx",
+        default="data/coordinates_20_cities.xlsx",
+        help="Path to TSP dataset (.xlsx Cartesian coordinates or symmetric distance matrix). Default: data/coordinates_20_cities.xlsx",
     )
     parser.add_argument(
         "--seed",
@@ -666,7 +794,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     parser.add_argument(
         "--output-dir",
         type=str,
-        default="outputs",
+        default=str(PROJECT_ROOT / "outputs"),
         help="Directory to save generated Markdown report and charts. Default: outputs",
     )
 
