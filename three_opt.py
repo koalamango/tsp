@@ -8,14 +8,18 @@ Dependencies: py -m pip install openpyxl scipy
 Creates an NN starting route, improves it with 3-opt, and writes a Markdown
 report into the outputs folder. Rerunning replaces this algorithm's report.
 """
-import math
 import sys
 from pathlib import Path
 from time import perf_counter
 
 from nearest_neighbour import (
-    read_cities, nearest_neighbour, route_length, exact_route,
+    build_euclidean_matrix,
+    read_cities,
+    nearest_neighbour,
+    route_length,
+    exact_route,
 )
+from tsp_utils import markdown_table
 
 
 def reconnect(tour, i, j, k, case):
@@ -84,7 +88,7 @@ def three_opt(route, distances):
 def main(file_path):
     cities, points = read_cities(file_path)
     n = len(cities)
-    distances = [[math.dist(a, b) for b in points] for a in points]
+    distances = build_euclidean_matrix(points)
 
     start = perf_counter()
     route, nn_checks = nearest_neighbour(distances)
@@ -128,14 +132,25 @@ def main(file_path):
         ('3-opt time complexity', 'O(p*n^3)'),
         ('Combined time complexity', 'O(n^2 + p*n^3)'),
     ]
-    lines = ['# Nearest neighbour + 3-opt results', '',
-             f'**Input:** {Path(file_path).name}', '', f'**Cities:** {n}', '',
-             '## Route quality', '', '| Measure | Value |', '|---|---:|']
-    lines += [f'| {label} | {value} |' for label, value in quality]
-    lines += ['', '100% means optimal; 110% means 10% longer than optimal.', '',
-              "Distances are straight-line distances in the coordinates' units.", '',
-              '## Efficiency', '', '| Measure | Value |', '|---|---|']
-    lines += [f'| {label} | {value} |' for label, value in efficiency]
+    lines = [
+        '# Nearest neighbour + 3-opt results',
+        '',
+        f'**Input:** {Path(file_path).name}',
+        '',
+        f'**Cities:** {n}',
+        '',
+        '## Route quality',
+        '',
+        markdown_table(['Measure', 'Value'], [[label, value] for label, value in quality], ['---', '---:']),
+        '',
+        '100% means optimal; 110% means 10% longer than optimal.',
+        '',
+        "Distances are straight-line distances in the coordinates' units.",
+        '',
+        '## Efficiency',
+        '',
+        markdown_table(['Measure', 'Value'], [[label, value] for label, value in efficiency]),
+    ]
     lines += ['', '## Interpretation', '',
               '- Times are single-run wall-clock measurements and vary by machine.',
               '- Heuristic timings exclude Excel reading, matrix construction, '

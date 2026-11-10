@@ -20,6 +20,9 @@ from scipy.optimize import Bounds, LinearConstraint, milp
 from scipy.sparse import lil_matrix
 
 
+from tsp_utils import markdown_table
+
+
 def read_cities(file_path):
     workbook = load_workbook(file_path, read_only=True, data_only=True)
     try:
@@ -59,6 +62,14 @@ def read_cities(file_path):
         return cities, points
     finally:
         workbook.close()
+
+
+def build_euclidean_matrix(points):
+    """Build a symmetric Euclidean distance matrix from (X, Y) coordinates."""
+    return [
+        [math.dist(a, b) for b in points]
+        for a in points
+    ]
 
 
 def nearest_neighbour(distances):
@@ -223,6 +234,17 @@ def save_report(
     else:
         percent = excess = "Undefined (optimum is zero)"
 
+    quality_rows = [
+        ["Final distance", f"{length:.6f}"],
+        ["Shortest possible distance", f"{optimum:.6f}"],
+        ["Final distance as % of shortest", percent],
+        ["Distance above optimum", excess],
+    ]
+    if initial_distance is not None:
+        quality_rows.append(
+            ["Initial nearest-neighbour distance", f"{initial_distance:.6f}"]
+        )
+
     lines = [
         f'# {suffix.replace("_", " ").title()} results',
         "",
@@ -232,20 +254,7 @@ def save_report(
         "",
         "## Route quality",
         "",
-        "| Measure | Value |",
-        "|---|---:|",
-        f"| Final distance | {length:.6f} |",
-        f"| Shortest possible distance | {optimum:.6f} |",
-        f"| Final distance as % of shortest | {percent} |",
-        f"| Distance above optimum | {excess} |",
-    ]
-
-    if initial_distance is not None:
-        lines.append(
-            f"| Initial nearest-neighbour distance | {initial_distance:.6f} |"
-        )
-
-    lines += [
+        markdown_table(["Measure", "Value"], quality_rows, ["---", "---:"]),
         "",
         "100% means optimal; 110% means 10% longer than optimal.",
         "",
@@ -253,13 +262,7 @@ def save_report(
         "",
         "## Efficiency",
         "",
-        "| Measure | Value |",
-        "|---|---|",
-    ]
-
-    lines += [
-        f"| {label} | {value} |"
-        for label, value in metrics
+        markdown_table(["Measure", "Value"], [[label, value] for label, value in metrics]),
     ]
 
     lines += [
@@ -332,10 +335,7 @@ def save_report(
 
 def main(file_path):
     cities, points = read_cities(file_path)
-    distances = [
-        [math.dist(a, b) for b in points]
-        for a in points
-    ]
+    distances = build_euclidean_matrix(points)
 
     start = perf_counter()
     route, examinations = nearest_neighbour(distances)

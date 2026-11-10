@@ -114,7 +114,7 @@ Because TSP is NP-hard, exact approaches become intractable as the number of cit
 | **Simulated Annealing** | Metaheuristic | $O(k \cdot n)$ | Near-optimal (asymptotically optimal) | Scales to large $n$ |
 | **Ant Colony Optimization** | Metaheuristic | $O(I \cdot m \cdot n^2)$ | Near-optimal heuristic | Scales to large $n$ |
 
-*Notes: $n$ = number of cities; $p$ = number of scan passes until convergence; $k$ = annealing iterations; $I$ = ACO iterations; $m$ = number of ants.*
+*Notes: $n$ = number of cities; $p$ = number of scan passes until convergence; $k$ = annealing iterations (`tsp_loader.py` uses $k = \max(8000,\ 50n^2)$); $I$ = ACO iterations; $m$ = number of ants.*
 
 ---
 
@@ -129,16 +129,22 @@ tsp_algorithms/
 ├── two_opt.py                      # 2-opt local search refinement with detailed performance metrics
 ├── three_opt.py                    # 3-opt local search (7 reconnection cases) with performance report
 ├── metaheuristic.py                # Simulated Annealing and Ant Colony Optimization implementations
+├── tsp_charts.py                   # Matplotlib chart generator for per-dataset and scalability reports
+├── tsp_utils.py                    # Shared gap-formatting and Markdown table helpers
 ├── xlsx_dictionary.py              # Data loader for symmetric Excel distance matrices
 ├── xlsx_cartesian_dictionary.py    # Data loader for 2D Cartesian coordinate Excel sheets
 ├── requirements.txt                # Project package dependencies
 │
 ├── Brute Force - Results.txt       # Benchmarking log for brute-force & branch-and-bound runs
 │
+├── outputs/                        # Generated Markdown reports and per-run CSV exports (created on first run)
+│   └── charts/                     # Generated PNG charts embedded in the benchmark reports
+│
 └── data/
     ├── cities_10_cartesian.xlsx    # 10-city dataset (City, X, Y coordinates)
     ├── cities_20_cartesian.xlsx    # 20-city dataset (City, X, Y coordinates)
     ├── cities_40_cartestian.xlsx   # 40-city dataset (City, X, Y coordinates)
+    ├── cities_80_cartesian.xlsx    # 80-city dataset (City, X, Y coordinates)
     └── distances_20_cities.xlsx    # 20-city symmetric distance matrix
 ```
 
@@ -197,18 +203,30 @@ The dependencies include:
 
 ### Unified Algorithm Orchestrator (`tsp_loader.py`)
 
-Run all algorithms in turn across the 10-city, 20-city, and 40-city Cartesian datasets, automatically generating comparative benchmark tables:
+Run all algorithms in turn across the 10-city, 20-city, 40-city, and 80-city Cartesian datasets, automatically generating comparative benchmark tables. Each algorithm is run several times per dataset (10 by default) so that runtime, and for the stochastic algorithms solution quality, can be reported as min / mean / max / standard deviation:
 
 ```bash
-# Run the complete suite on 10, 20, and 40-city datasets (includes 10-city brute-force & branch-and-bound demo)
+# Run the complete suite on the 10, 20, 40 and 80-city datasets, 10 runs per algorithm
+# (includes 10-city brute-force & branch-and-bound demo)
 python tsp_loader.py
 
-# Specify custom Cartesian dataset paths
-python tsp_loader.py -s data/cities_10_cartesian.xlsx -c data/cities_20_cartesian.xlsx -l data/cities_40_cartestian.xlsx
+# Change the number of runs per algorithm (default 10, must be at least 1)
+python tsp_loader.py --runs 25
 
-# Skip exact MILP solver baseline
+# Change the base seed for Simulated Annealing / Ant Colony (default 42; run i uses seed + i)
+python tsp_loader.py --seed 7
+
+# Skip exact MILP solver baseline (gap vs optimum and optimum hit rate become N/A)
 python tsp_loader.py --no-exact
 ```
+
+| Option | Description | Default |
+|:---|:---|:---|
+| `--runs`, `-r` | Number of timed runs per algorithm | `10` |
+| `--seed` | Base random seed for Simulated Annealing and Ant Colony (run *i* uses `seed + i`) | `42` |
+| `--no-exact` | Skip the exact MILP baseline | off |
+
+See [Output Reports](#output-reports) for what is measured and recorded.
 
 ---
 
@@ -252,7 +270,22 @@ python brute_force_visualized.py
 *Prompt: Enter the filename (e.g., `data/distances_20_cities.xlsx`).*
 
 ### Running Metaheuristics
-Import and run Simulated Annealing or Ant Colony Optimization in a script or interactive session:
+Execute directly from the command line to run both Simulated Annealing and Ant Colony Optimization, compute the exact HiGHS MILP baseline, generate a dual-panel convergence chart (`outputs/charts/*_convergence.png`), and write a Markdown report (`outputs/*_metaheuristic_results.md`):
+
+```bash
+# Run with default 20-city Cartesian dataset (data/cities_20_cartesian.xlsx)
+python metaheuristic.py
+
+# Run on a custom Cartesian coordinate dataset or symmetric distance matrix
+python metaheuristic.py data/cities_10_cartesian.xlsx
+python metaheuristic.py data/distances_20_cities.xlsx
+
+# Custom parameters: random seed, SA iterations, ACO iterations, or skip exact baseline
+python metaheuristic.py data/cities_20_cartesian.xlsx --seed 42 --sa-iter 10000 --aco-iter 200
+python metaheuristic.py data/cities_80_cartesian.xlsx --no-exact
+```
+
+Alternatively, import and run Simulated Annealing or Ant Colony Optimization in a script or interactive session:
 
 ```python
 from metaheuristic import load_distance_excel, solve_tsp_sa, solve_tsp_aco
@@ -267,6 +300,8 @@ print("SA Best Distance:", sa_result["distance"])
 aco_result = solve_tsp_aco(dist_matrix, n_ants=20, n_iter=150, seed=42)
 print("ACO Best Distance:", aco_result["distance"])
 ```
+
+> **Note:** the parameters above are fixed values for a simple example. `tsp_loader.py` instead scales Simulated Annealing to the problem size (see [Output Reports](#output-reports)) and gives each run a different seed (`--seed` + run index).
 
 ### Data Loading Utilities
 Inspect parsed coordinates or distance matrices:
@@ -288,4 +323,30 @@ Each individual algorithm report includes:
 - **Complexity Analysis**: Theoretical operation-count formulas and Big-O notation.
 - **Complete Tour Itineraries**: Numbered, step-by-step city visiting orders for both the heuristic route and the proven optimal tour.
 
-The orchestrator (`tsp_loader.py`) also writes side-by-side comparison tables across all algorithms into `outputs/tsp_loader_<dataset>_results.md`.
+The orchestrator (`tsp_loader.py`) also writes side-by-side comparison tables across all algorithms into `outputs/tsp_loader_<dataset>_results.md`. Because every algorithm is run multiple times (see `--runs`), each report contains:
+
+- **Performance & Quality Summary**: one row per algorithm. Distance and gap vs optimum come from the **best run**; time is the **mean** over all runs.
+- **Runtime Statistics** (all algorithms): min, mean, max and standard deviation (SD) of the runtime.
+- **Distance Statistics** (non-deterministic algorithms only - Simulated Annealing and Ant Colony Optimization): min, mean, max and SD of the final tour distance, the mean gap vs the optimum, and the **optimum hit rate** (how many runs, e.g. `7/10`, reached the proven optimum; `N/A` when run with `--no-exact`).
+- **Visual Charts**:
+  - **Runtime Performance**: Horizontal bar chart on a logarithmic scale showing mean execution time with min–max error bars for every algorithm.
+  - **Tour Distance Performance**: Grouped horizontal bar chart showing the best (minimum), mean, and worst (maximum) tour distance for each algorithm, alongside a reference line for the proven MILP optimum.
+- **Full Tour Itineraries**: the best-run route for each algorithm, with its runtime mean ± SD.
+
+### Cross-Dataset Scalability Summary (`outputs/tsp_loader_scalability_summary.md`)
+
+When multiple datasets of different city counts are evaluated in a run, `tsp_loader.py` also writes a combined scalability report featuring cross-problem line graphs:
+- **Runtime vs. Number of Cities**: Multi-line graph (logarithmic runtime scale) showing how execution time scales from small to large instances for each algorithm.
+- **Best Result vs. Number of Cities**: Multi-line graph displaying the percentage gap above the proven optimum ($(\text{distance} / \text{optimum} - 1) \times 100\%$) across all problem sizes. Methods that run only on small instances (Brute Force, Branch and Bound) are rendered as individual benchmark points.
+- **Summary Comparison Tables**: Side-by-side runtime and solution-quality tables across all evaluated city counts.
+
+All chart images are automatically generated via Matplotlib and saved to [`outputs/charts/`](file:///C:/Users/philr/PycharmProjects/tsp_algorithms/outputs/charts).
+
+Notes on how the numbers are produced:
+
+- **Deterministic vs non-deterministic:** Exact MILP, Nearest Neighbour, 2-Opt, 3-Opt, Brute Force and Branch and Bound always return the same tour, so only their runtime varies between runs. Simulated Annealing and Ant Colony Optimization are stochastic: run *i* uses seed `--seed + i`, so runs differ but the whole benchmark is reproducible.
+- **Warm-up:** each algorithm is run once before timing starts and that run is discarded. The first call pays one-off costs (lazy imports, solver set-up, cold caches), which would otherwise inflate the maximum runtime and SD.
+- **2-Opt / 3-Opt timing (†):** both require a Nearest Neighbour tour as input, so their reported time is the NN construction time plus the refinement time. The report tables carry a footnote saying so.
+- **Simulated Annealing scaling:** when run through `tsp_loader.py`, Simulated Annealing iterations are `max(8000, 50 · n²)`, the starting temperature is calibrated from the dataset (so an average uphill move is accepted ~80% of the time), and the cooling rate is fitted so the temperature reaches 0.1% of its start value at the final iteration. The parameters used are listed in each report header.
+
+Every timed run is also exported to `outputs/tsp_loader_<dataset>_runs.csv` (columns: `algorithm, deterministic, run, seed, distance, time_sec`) for further analysis in Excel or pandas. Warm-up runs are not included.

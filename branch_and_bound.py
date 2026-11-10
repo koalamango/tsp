@@ -16,6 +16,7 @@ import time
 from typing import Dict, List, Optional
 
 from nearest_neighbour import (
+    build_euclidean_matrix,
     read_cities,
     nearest_neighbour,
     route_length,
@@ -114,10 +115,7 @@ def run_branch_and_bound(
 
 def main(file_path: str) -> None:
     cities, points = read_cities(file_path)
-    distances = [
-        [math.dist(a, b) for b in points]
-        for a in points
-    ]
+    distances = build_euclidean_matrix(points)
 
     # Use Nearest Neighbour to establish a tight initial upper bound
     nn_route, _ = nearest_neighbour(distances)

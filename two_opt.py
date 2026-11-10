@@ -8,11 +8,11 @@ Run: py two_opt.py "C:/path/cities.xlsx"
 This creates its own nearest-neighbour route, then improves it with 2-opt.
 It imports shared functions, not saved results, from nearest_neighbour.py.
 """
-import math
 import sys
 from time import perf_counter
 
 from nearest_neighbour import (
+    build_euclidean_matrix,
     read_cities,
     nearest_neighbour,
     route_length,
@@ -59,10 +59,7 @@ def two_opt(route, distances):
 
 def main(file_path):
     cities, points = read_cities(file_path)
-    distances = [
-        [math.dist(a, b) for b in points]
-        for a in points
-    ]
+    distances = build_euclidean_matrix(points)
 
     start = perf_counter()
     route, examinations = nearest_neighbour(distances)
