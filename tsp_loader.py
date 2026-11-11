@@ -10,7 +10,7 @@ Runs each implemented TSP algorithm in turn across available datasets:
   4. 3-Opt Local Search (7-case triplet reconnection iterative refinement)
   5. Simulated Annealing (Metaheuristic: hybrid 2-opt + swap)
   6. Ant Colony Optimization (Metaheuristic: Ant System)
-  7. Brute Force & Branch and Bound (Exact search for small instances)
+  7. Exact Solvers: Brute Force & Dynamic Programming (Held-Karp)
 
 Every algorithm is run several times per dataset (default 10, see --runs). Runtime
 statistics (min / mean / max / SD) are recorded for every algorithm; distance
@@ -73,8 +73,8 @@ from algorithm.metaheuristics.metaheuristic import (
     solve_tsp_sa,
     solve_tsp_aco,
 )
-from algorithm.exact.brute_force_visualized import run_brute_force
-from algorithm.exact.branch_and_bound import run_branch_and_bound
+from algorithm.exact.brute_force.brute_force_visualized import run_brute_force
+from algorithm.exact.dynamic_programming.held_karp import run_held_karp
 from utils.tsp_charts import (
     save_distance_bar_chart,
     save_runtime_bar_chart,
@@ -112,24 +112,17 @@ NN_FOOTNOTE = (
 
 
 def estimate_exact_times(n: int) -> Tuple[str, str, int]:
-    """Calculate theoretical permutations and estimated runtimes for Brute Force & Branch and Bound."""
+    """Calculate theoretical operations and estimated runtimes for Brute Force & Dynamic Programming (Held-Karp)."""
     perms = math.factorial(n - 1)
     # Calibrated Python throughput: ~1,000,000 permutations/sec
     bf_seconds = perms / 1_000_000.0
 
-    # Branch and bound empirical pruning reduction
-    # Calibrated to measured baseline from 'Brute Force - Results.txt':
-    # n=12 cities ran in 2.17 seconds with ~5,225,804 pruned states.
-    # Effective branching factor base ~2.8x per city depth:
-    # 2.17s * (2.8 ^ (n - 12))
-    if n <= 10:
-        bb_seconds = 0.068
-    elif n == 12:
-        bb_seconds = 2.17
-    else:
-        bb_seconds = 2.17 * (2.8 ** (n - 12))
+    # Held-Karp dynamic programming transitions: O(n^2 * 2^n)
+    # Calibrated Python throughput: ~2,000,000 state transitions/sec
+    hk_ops = (n ** 2) * (1 << n)
+    hk_seconds = hk_ops / 2_000_000.0
 
-    return format_duration(bf_seconds), format_duration(bb_seconds), perms
+    return format_duration(bf_seconds), format_duration(hk_seconds), perms
 
 
 def slugify(text: str) -> str:
@@ -410,32 +403,19 @@ def run_benchmarks(
         run_step(step_label, algo_name, solver_fn,
                  deterministic=deterministic, includes_nn_time=includes_nn)
 
-    # Optional: Brute Force & Branch and Bound
+    # Optional: Exact Solvers under algorithm/exact (Brute Force & Dynamic Programming)
     if run_bf:
-        # Branch and Bound starts from the Nearest Neighbour heuristic upper bound
-        nn_step = next((r for r in results if r.algorithm == "Nearest Neighbour"), None)
-        if nn_step is not None:
-            initial_bb_route = nn_step.best_run.route
-            initial_bb_bound = nn_step.distance
-        else:
-            initial_bb_route, _ = nearest_neighbour(dist_matrix)
-            initial_bb_bound = route_length(initial_bb_route, dist_matrix)
-
-        def solve_bb(_run_idx: int) -> Tuple[List[int], str]:
-            bb_res = run_branch_and_bound(
-                dist_matrix,
-                initial_upper_bound=initial_bb_bound,
-                initial_route=initial_bb_route,
-            )
-            return bb_res["route"], f"{bb_res['branches_pruned']:,} pruned"
-
         bonus_steps = [
             (
                 f"[Bonus] Brute Force ({math.factorial(n - 1):,} permutations)",
                 f"Brute Force ({n} cities)",
                 lambda _i: (run_brute_force(cities, dist_matrix)["route"], None),
             ),
-            ("[Bonus] Branch and Bound", f"Branch and Bound ({n} cities)", solve_bb),
+            (
+                f"[Bonus] Dynamic Programming (Held-Karp)",
+                f"Held-Karp DP ({n} cities)",
+                lambda _i: (run_held_karp(cities, dist_matrix)["route"], f"{n * (1 << n):,} states"),
+            ),
         ]
         for step_label, algo_name, solver_fn in bonus_steps:
             run_step(step_label, algo_name, solver_fn, gap_default="0.00%")
@@ -558,17 +538,18 @@ def write_markdown_report(
     # Scalability / runtime estimation section (especially pertinent for n > 10)
     scalability_lines = []
     if n > 10:
-        bf_est, bb_est, perms = estimate_exact_times(n)
+        bf_est, hk_est, perms = estimate_exact_times(n)
         exact_res = next((r for r in results if r.algorithm == EXACT_ALGORITHM), None)
         highs_time_str = (
             f"**{exact_res.time_stats.mean:.4f} seconds** (actual, mean of {runs_label})"
             if exact_res else "Skipped"
         )
+        hk_status = "Solved to global optimum" if n <= 10 else ("Feasible exact solver" if n <= 16 else "Exponential compute / memory limit")
         scalability_table = markdown_table(
             ["Exact Method", "Theoretical Operations / States", "Estimated Runtime on this Machine", "Status"],
             [
-                ["**Pure Brute Force**", f"$(n-1)! = {perms:,}$ permutations", f"**{bf_est}**", "Infeasible for real-time run"],
-                ["**Branch and Bound**", "$O(c^n)$ pruned branch states", f"**{bb_est}**", "Exponential worst-case"],
+                ["**Pure Brute Force**", f"$(n-1)! = {perms:,}$ permutations", f"**{bf_est}**", "Infeasible for real-time run" if n > 10 else "Solved to global optimum"],
+                ["**Held-Karp DP**", f"$O(n^2 2^n) \\approx {(n**2)*(1 << n):,}$ operations", f"**{hk_est}**", hk_status],
                 ["**HiGHS MILP Solver**", "Dynamic DFJ subtour cuts", highs_time_str, "Solved to global optimum"],
             ],
         )
@@ -644,7 +625,7 @@ def write_markdown_report(
         "- **2-Opt & 3-Opt:** Iterative edge-swap local search refining the Nearest Neighbour route. Their runtimes include building that route.",
         "- **Simulated Annealing & Ant Colony:** Stochastic metaheuristics for escaping local optima. "
         "Simulated Annealing iterations scale as max(8000, 50·n²) with a data-calibrated start temperature.",
-        "- **Branch & Bound:** Prunes partial tours as soon as cumulative cost exceeds known upper bound.",
+        "- **Dynamic Programming (Held-Karp):** Computes exact global optimum via Bellman-Held-Karp subproblem memoization ($O(n^2 2^n)$).",
         "- **Brute Force:** Evaluates all $(n - 1)!$ permutations.",
         "- **Deterministic algorithms** (everything except Simulated Annealing and Ant Colony) return the same tour every run; only their runtime varies.",
         "- **Warm-up:** each algorithm is run once before timing starts and that run is discarded, so one-off start-up costs do not skew the statistics.",
@@ -664,7 +645,7 @@ def write_scalability_report(
     """Write a cross-dataset report with runtime-vs-cities and gap-vs-cities line graphs.
 
     Each algorithm is one line. Algorithms that only ran on one dataset (Brute Force and
-    Branch and Bound, which only run on the smallest dataset) appear as a single marker.
+    Dynamic Programming, which only run on the smallest dataset) appear as a single marker.
     """
     outputs_dir.mkdir(parents=True, exist_ok=True)
     charts_dir = outputs_dir / CHARTS_DIRNAME
@@ -756,7 +737,7 @@ def write_scalability_report(
         "",
         "> [!NOTE]",
         "> Raw tour distances are not comparable between datasets of different sizes, so the best result is shown as the gap (%) "
-        "above the proven optimum. Brute Force and Branch and Bound only run on the smallest dataset, so they appear as a single marker.",
+        "above the proven optimum. Brute Force and Dynamic Programming only run on the smallest dataset, so they appear as a single marker.",
         "",
     ]
     report_file = outputs_dir / "tsp_loader_scalability_summary.md"
@@ -855,7 +836,7 @@ def main() -> None:
         if path.exists():
             cities, dist_matrix, dataset_type = load_tsp_data(str(path))
             n = len(cities)
-            # Brute-force & branch-and-bound are exact exhaustive searches feasible only for small instances (n <= 10)
+            # Brute-force & Dynamic Programming (Held-Karp) are exact searches under algorithm/exact evaluated for small instances (n <= 10)
             run_bf = n <= 10
             summaries.append(evaluate_suite(
                 f"{dataset_type} ({n} Cities) - {path.name}",

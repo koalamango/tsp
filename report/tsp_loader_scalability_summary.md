@@ -1,6 +1,6 @@
 # TSP Scalability Summary
 
-- **Timestamp:** 2026-11-10 22:14:33
+- **Timestamp:** 2026-11-11 21:10:40
 - **Runs per algorithm:** 10 (plus 1 untimed warm-up run each)
 - **Base seed:** 42
 - **Datasets:**
@@ -17,14 +17,14 @@ Mean runtime in seconds (log scale). 2-Opt and 3-Opt times include building the 
 
 | Algorithm | 10 cities | 20 cities | 40 cities | 80 cities |
 | --- | --- | --- | --- | --- |
-| Exact MILP (HiGHS) | 0.002083 | 0.004597 | 0.063850 | 0.114235 |
-| Nearest Neighbour | 0.000005 | 0.000014 | 0.000049 | 0.000186 |
-| 2-Opt (from NN) | 0.000023 | 0.000081 | 0.000386 | 0.004169 |
-| 3-Opt (from NN) | 0.000118 | 0.001940 | 0.016665 | 0.411133 |
-| Simulated Annealing | 0.007844 | 0.020130 | 0.082433 | 0.325594 |
-| Ant Colony Opt. | 0.041180 | 0.123457 | 0.412126 | 1.450870 |
-| Brute Force | 0.188383 | - | - | - |
-| Branch and Bound | 0.011294 | - | - | - |
+| Exact MILP (HiGHS) | 0.002110 | 0.006389 | 0.063544 | 0.110159 |
+| Nearest Neighbour | 0.000004 | 0.000032 | 0.000048 | 0.000177 |
+| 2-Opt (from NN) | 0.000023 | 0.000117 | 0.000378 | 0.004270 |
+| 3-Opt (from NN) | 0.000114 | 0.001989 | 0.016349 | 0.410596 |
+| Simulated Annealing | 0.007907 | 0.020168 | 0.081492 | 0.320293 |
+| Ant Colony Opt. | 0.041392 | 0.128119 | 0.400946 | 1.443964 |
+| Brute Force | 0.193882 | - | - | - |
+| Held-Karp DP | 0.001566 | - | - | - |
 
 ## Best Result vs Number of Cities
 
@@ -39,7 +39,7 @@ Mean runtime in seconds (log scale). 2-Opt and 3-Opt times include building the 
 | Simulated Annealing | +0.00% | +0.00% | +0.00% | +0.21% |
 | Ant Colony Opt. | +0.00% | +0.00% | +1.19% | +3.22% |
 | Brute Force | +0.00% | - | - | - |
-| Branch and Bound | +0.00% | - | - | - |
+| Held-Karp DP | +0.00% | - | - | - |
 
 > [!NOTE]
-> Raw tour distances are not comparable between datasets of different sizes, so the best result is shown as the gap (%) above the proven optimum. Brute Force and Branch and Bound only run on the smallest dataset, so they appear as a single marker.
+> Raw tour distances are not comparable between datasets of different sizes, so the best result is shown as the gap (%) above the proven optimum. Brute Force and Dynamic Programming only run on the smallest dataset, so they appear as a single marker.

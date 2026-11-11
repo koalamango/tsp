@@ -1,3 +1,7 @@
+"""
+Author: Oshanda Hembathanthrige
+"""
+
 import itertools
 import pandas as pd
 from pathlib import Path
@@ -50,43 +54,49 @@ def load_distances(path, sheet_name, decimals=0):
 
     return coordinates, cities, distances
 
-# Load the locations and the distance matrix
-filename = input("Enter the Excel filename (ex: coordinates_10_cities.xlsx) : ")
-sheet_number = int(input("Enter the Excel sheet number (1 to 5) : ")) - 1
-file_path = project_root/"data"/filename
-if sheet_number < 0 or sheet_number > 4:
-    raise ValueError(f'Invalid sheet number')
 
-coordinates, cities, distances = load_distances(file_path, sheet_number)
+def main():
+    # Load the locations and the distance matrix
+    filename = input("Enter the Excel filename : ")
+    sheet_number = int(input("Enter the Excel sheet number (1 to 5) : ")) - 1
+    file_path = project_root/"data"/filename
+    if sheet_number < 0 or sheet_number > 4:
+        raise ValueError(f'Invalid sheet number')
 
-# Lock the starting location and find the remaining targets
-start_city = 'London'
-other_cities = [c for c in cities if c != start_city]
+    coordinates, cities, distances = load_distances(file_path, sheet_number)
 
-best_route = None
-min_distance = float('inf')
+    # Lock the starting location and find the remaining targets
+    start_city = 'London'
+    other_cities = [c for c in cities if c != start_city]
 
-# Use brute force to check every possible permutation of the route
-for perm in itertools.permutations(other_cities):
-    # Construct a complete round-trip loop
-    current_route = [start_city] + list(perm) + [start_city]
-    current_distance = 0
-    # Accumulate the leg distances for the path
-    for i in range(len(current_route) - 1):
-        from_city = current_route[i]
-        to_city = current_route[i+1]
-        current_distance += distances[from_city][to_city]
-        
-    # Track the absolute shortest loop found so far
-    if current_distance < min_distance:
-        min_distance = current_distance
-        best_route = current_route
+    best_route = None
+    min_distance = float('inf')
 
-#Draw the best route
-for i in range(len(best_route) - 1):
-    from_city = best_route[i]
-    to_city = best_route[i+1]
+    # Use brute force to check every possible permutation of the route
+    for perm in itertools.permutations(other_cities):
+        # Construct a complete round-trip loop
+        current_route = [start_city] + list(perm) + [start_city]
+        current_distance = 0
+        # Accumulate the leg distances for the path
+        for i in range(len(current_route) - 1):
+            from_city = current_route[i]
+            to_city = current_route[i+1]
+            current_distance += distances[from_city][to_city]
+            
+        # Track the absolute shortest loop found so far
+        if current_distance < min_distance:
+            min_distance = current_distance
+            best_route = current_route
 
-# Output the results
-print(f"Optimal Route: {' -> '.join(best_route)}")
-print(f"Minimum Distance: {min_distance} miles")
+    #Draw the best route
+    for i in range(len(best_route) - 1):
+        from_city = best_route[i]
+        to_city = best_route[i+1]
+
+    # Output the results
+    print(f"Optimal Route: {' -> '.join(best_route)}")
+    print(f"Minimum Distance: {min_distance} miles")
+
+
+if __name__ == "__main__":
+    main()

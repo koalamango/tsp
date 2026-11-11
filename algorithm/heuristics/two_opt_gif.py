@@ -1,4 +1,5 @@
-"""Animate best-improvement 2-opt on the first worksheet of a coordinate workbook.
+"""
+Author: Richard ClarkAnimate best-improvement 2-opt on the first worksheet of a coordinate workbook.
 
 Run: python two_opt_gif.py
 Optional: python two_opt_gif.py data/coordinates_10_cities.xlsx --output outputs/demo.gif

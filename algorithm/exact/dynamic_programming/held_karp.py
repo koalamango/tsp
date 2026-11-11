@@ -49,13 +49,6 @@ def load_distances(path, sheet_name, decimals=0):
 
     return coordinates, cities, distances
 
-filename = input("Enter the Excel filename (ex: coordinates_10_cities.xlsx) : ")
-sheet_number = int(input("Enter the Excel sheet number (1 to 5) : ")) - 1
-file_path = project_root/"data"/filename
-if sheet_number < 0 or sheet_number > 4:
-    raise ValueError(f'Invalid sheet number')
-coordinates, cities, distances = load_distances(file_path, sheet_number)
-
 def held_karp(cities, distances, start=0):
     number_of_cities = len(cities)
     # Create a distance matrix for the cities based on the distances dictionary
@@ -101,6 +94,39 @@ def held_karp(cities, distances, start=0):
     path.reverse()
     return best, [cities[i] for i in path] + [cities[start]]
 
-cost, route = held_karp(cities, distances)
-print("Minimum distance:", cost)
-print(" -> ".join(route))
+
+def run_held_karp(cities, dist_matrix):
+    """Run exact Held-Karp dynamic programming and return benchmark metrics."""
+    import time
+    t_start = time.perf_counter()
+    distances = {
+        c1: {c2: dist_matrix[i][j] for j, c2 in enumerate(cities) if i != j}
+        for i, c1 in enumerate(cities)
+    }
+    cost, route_cities = held_karp(cities, distances, start=0)
+    exec_time = time.perf_counter() - t_start
+    city_to_idx = {city: idx for idx, city in enumerate(cities)}
+    route_indices = [city_to_idx[c] for c in route_cities]
+    return {
+        "route": route_indices,
+        "distance": cost,
+        "time_sec": exec_time,
+        "states": len(cities) * (1 << len(cities)),
+    }
+
+
+def main():
+    filename = input("Enter the Excel filename : ")
+    sheet_number = int(input("Enter the Excel sheet number (1 to 5) : ")) - 1
+    file_path = project_root/"data"/filename
+    if sheet_number < 0 or sheet_number > 4:
+        raise ValueError(f'Invalid sheet number')
+    coordinates, cities, distances = load_distances(file_path, sheet_number)
+
+    cost, route = held_karp(cities, distances)
+    print("Minimum distance:", cost)
+    print(" -> ".join(route))
+
+
+if __name__ == "__main__":
+    main()
