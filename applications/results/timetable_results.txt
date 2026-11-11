@@ -1,5 +1,4 @@
 
-Initial total distance: 1170 metres
 Initial distance: 1170 metres
 Optimised distance: 490 metres
 Distance reduction: 58.12 %
