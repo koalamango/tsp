@@ -1,4 +1,5 @@
-"""2-opt variant of tsp_loader for all sheets in a coordinate workbook.
+"""
+Author: Richard Clark2-opt variant of tsp_loader for all sheets in a coordinate workbook.
 
 Run: python algorithm/heuristics/tsp_loader_two_opt.py [--runs 10]
 Prints results and saves a Markdown report in outputs/.

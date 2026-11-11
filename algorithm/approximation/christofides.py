@@ -1,4 +1,5 @@
 # ============================================================
+# Author: Tyrone Sequeira
 # CHRISTOFIDES ALGORITHM FOR THE TRAVELLING SALESMAN PROBLEM
 # CSV VERSION - NO PANDAS OR NUMPY REQUIRED
 # ============================================================

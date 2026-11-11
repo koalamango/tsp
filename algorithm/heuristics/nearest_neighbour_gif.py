@@ -1,4 +1,7 @@
-"""Save a step-by-step nearest-neighbour GIF from the first worksheet.
+"""
+Author: Richard Clark
+
+Save a step-by-step nearest-neighbour GIF from the first worksheet.
 
 Run: python nearest_neighbour_gif.py
 Optional: python nearest_neighbour_gif.py data/coordinates_10_cities.xlsx
