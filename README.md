@@ -2,7 +2,7 @@
 
 A Python repository implementing, analyzing, and benchmarking classical and modern algorithms for the **Travelling Salesperson Problem (TSP)**.
 
-The project provides implementations ranging from exact solvers (brute-force permutation search with real-time visualization, and Mixed-Integer Linear Programming via HiGHS) to greedy constructive heuristics, local-search tour improvements (2-Opt, 3-Opt), and stochastic metaheuristics (Simulated Annealing and Ant Colony Optimization).
+The project provides implementations ranging from exact solvers (brute-force permutation search with real-time visualization, dynamic programming via the Held-Karp algorithm, and Mixed-Integer Linear Programming via HiGHS) to polynomial-time approximation (Christofides), greedy constructive heuristics, local-search tour improvements (2-Opt, 3-Opt), stochastic metaheuristics (Simulated Annealing and Ant Colony Optimization), and real-world campus timetabling applications.
 
 ---
 
@@ -17,9 +17,12 @@ The project provides implementations ranging from exact solvers (brute-force per
 - [Overview](#overview)
 - [Implemented Algorithms](#implemented-algorithms)
   - [Exact Methods](#1-exact-methods)
-  - [Constructive Heuristics](#2-constructive-heuristics)
-  - [Local Search & Improvement Heuristics](#3-local-search--improvement-heuristics)
-  - [Metaheuristics](#4-metaheuristics)
+  - [Approximation Algorithms](#2-approximation-algorithms)
+  - [Constructive Heuristics](#3-constructive-heuristics)
+  - [Local Search & Improvement Heuristics](#4-local-search--improvement-heuristics)
+  - [Metaheuristics](#5-metaheuristics)
+- [Real-World Applications](#real-world-applications)
+  - [Travelling Student Problem (Timetabling & Room Allocation)](#travelling-student-problem-timetabling--room-allocation)
 - [Algorithm Complexity & Comparison](#algorithm-complexity--comparison)
 - [Repository Structure](#repository-structure)
 - [Data Formats](#data-formats)
@@ -28,6 +31,7 @@ The project provides implementations ranging from exact solvers (brute-force per
   - [Unified Algorithm Orchestrator (`tsp_loader.py`)](#unified-algorithm-orchestrator-tsp_loaderpy)
   - [Running Individual Solvers](#running-individual-solvers)
   - [Interactive Visualizers](#interactive-visualizers)
+  - [Running Real-World Applications](#running-real-world-applications)
 - [Output Reports](#output-reports)
 
 ---
@@ -38,32 +42,45 @@ Given a list of cities and the distances between each pair, the Travelling Sales
 
 Because TSP is NP-hard, exact approaches become intractable as the number of cities $n$ grows. This repository demonstrates how different algorithmic paradigms balance computational complexity, execution time, and solution quality:
 
-1. **Exact Solvers** guarantee the global optimum for small problem instances or benchmark baselines.
-2. **Heuristics** rapidly generate good solutions (e.g., within milliseconds for $n = 20$).
-3. **Local Search** iteratively eliminates route crossings and suboptimal connections.
-4. **Metaheuristics** escape local optima to discover near-optimal solutions on larger graphs.
-
----
+1. **Exact Solvers** guarantee the global optimum for small to moderate problem instances (pure brute-force permutation search up to $n \le 12$, Held-Karp dynamic programming up to $n \le 20$, and HiGHS MILP benchmark baselines).
+2. **Approximation Algorithms** provide provable theoretical performance bounds (e.g., Christofides' 1.5-approximation) in polynomial time.
+3. **Heuristics** rapidly generate good solutions (e.g., within milliseconds for $n = 20$).
+4. **Local Search** iteratively eliminates route crossings and suboptimal connections.
+5. **Metaheuristics** escape local optima to discover near-optimal solutions on larger graphs.
+6. **Real-World Applications** extend combinatorial optimization models to solve complex real-world resource allocation problems, such as university timetable scheduling and campus travel distance minimization.
 
 ## Implemented Algorithms
 
 ### 1. Exact Methods
 
-- **Brute-Force Search with Live Visualization (`algorithm/exact/brute_force_visualized.py`)**:
-  - Evaluates all $(n - 1)!$ permutations starting and ending at a fixed city (e.g., London).
-  - Features real-time animated plotting in Matplotlib, displaying current route evaluations, best-so-far distances, and the final optimal tour, as well as a headless runner (`run_brute_force`) used by `tsp_loader.py`.
-  - Demonstrates the factorial explosion of exhaustive search ($n = 12$ requires checking 39.9M routes in ~110 seconds without pruning, or ~2.17 seconds with branch-and-bound pruning).
+- **Dynamic Programming — Held-Karp Algorithm (`algorithm/exact/dynamic_programming/held_karp.py` & `held_karp_visualized.py`)**:
+  - Solves the TSP to exact global optimality using the Bellman-Held-Karp dynamic programming formulation with bitmask subset states: `cost_matrix[subset][city]`.
+  - Achieves a time complexity of $O(n^2 2^n)$ and memory of $O(n 2^n)$, making exact solutions feasible for moderate graphs ($n \le 20$) where exhaustive search ($O((n-1)!)$) becomes computationally impossible.
+  - Accompanied by an interactive visualizer (`held_karp_visualized.py`) animating the optimal tour construction step-by-step.
 
-- **Branch and Bound (`algorithm/exact/branch_and_bound.py`)**:
-  - Exact depth-first tree search with admissible lower-bound pruning based on each unvisited city's minimum outgoing edge.
-  - Uses an initial heuristic upper bound (e.g. Nearest Neighbour or 2-Opt) to prune suboptimal partial tours early, dramatically reducing the search space compared to exhaustive brute force.
+- **Brute-Force Permutation Search (`algorithm/exact/brute_force/brute_force.py` & `algorithm/exact/brute_force_visualized.py`)**:
+  - Evaluates all $(n - 1)!$ permutations starting and ending at a fixed depot city (e.g., London).
+  - Features real-time animated plotting in Matplotlib, displaying current route evaluations, best-so-far distances, and the final optimal tour, as well as a headless runner (`run_brute_force`) used by `tsp_loader.py`.
+  - Demonstrates the factorial explosion of exhaustive search ($n = 12$ requires checking 39.9M routes in ~110 seconds without pruning).
 
 - **HiGHS Mixed-Integer Linear Programming (`scipy.optimize.milp`)**:
   - Embedded in `algorithm/heuristics/nearest_neighbour.py` and `algorithm/heuristics/three_opt.py` as an exact ground-truth solver.
   - Employs the Dantzig-Fulkerson-Johnson (DFJ) formulation with dynamic subtour-elimination cuts.
   - Proves the true global optimum ($\text{MIP gap} = 0.0$) to benchmark heuristic accuracy.
 
-### 2. Constructive Heuristics
+### 2. Approximation Algorithms
+
+- **Christofides Algorithm (`algorithm/approximation/christofides.py`)**:
+  - Polynomial-time approximation algorithm guaranteeing a solution at most $1.5$ times the optimal tour length on metric TSP instances satisfying the triangle inequality.
+  - Operates in $O(n^3)$ time through 5 systematic graph phases:
+    1. Computes a Minimum Spanning Tree (MST) of the metric graph.
+    2. Identifies the subset of vertices with odd degree in the MST.
+    3. Computes a minimum-weight perfect matching among the odd-degree vertices.
+    4. Combines the MST and matching edges to form an Eulerian multigraph.
+    5. Traces an Eulerian tour and shortcuts previously visited vertices to construct a valid Hamiltonian cycle.
+  - Implemented cleanly with standard CSV input handling and Matplotlib route plotting.
+
+### 3. Constructive Heuristics
 
 - **Nearest Neighbour (`algorithm/heuristics/nearest_neighbour.py`)**:
   - Greedily extends the tour by choosing the closest unvisited city at each step until a full cycle is formed.
@@ -71,7 +88,7 @@ Because TSP is NP-hard, exact approaches become intractable as the number of cit
   - Automatically compares against the exact MILP solution and outputs an audit report (`outputs/<input>_nearest_neighbour_results.md`).
   - Includes an interactive step-by-step visualizer (`algorithm/heuristics/nearest_neighbour_visualization.py`).
 
-### 3. Local Search & Improvement Heuristics
+### 4. Local Search & Improvement Heuristics
 
 - **2-Opt Local Search (`algorithm/heuristics/two_opt.py`)**:
   - Takes an initial tour (constructed via Nearest Neighbour) and iteratively eliminates crossed edges by reversing tour segments.
@@ -85,7 +102,7 @@ Because TSP is NP-hard, exact approaches become intractable as the number of cit
   - Provides deeper optimization than 2-opt, escaping 2-optimal local minima.
   - Includes an interactive triplet-reconnection visualizer (`algorithm/heuristics/three_opt_visualization.py`).
 
-### 4. Metaheuristics
+### 5. Metaheuristics
 
 - **Simulated Annealing (`algorithm/metaheuristics/metaheuristic.py` & `algorithm/metaheuristics/simulated_annealing_visualized.py`)**:
   - Probabilistic technique based on thermal annealing.
@@ -100,20 +117,45 @@ Because TSP is NP-hard, exact approaches become intractable as the number of cit
 
 ---
 
+## Real-World Applications
+
+### Travelling Student Problem (Timetabling & Room Allocation)
+
+Located in [`applications/`](applications/), this application models and solves the **Travelling Student and Faculty Campus Scheduling Problem** (`applications/travelling_student_problem.py`). Given a university campus with lecture halls and laboratories of varying capacities, student cohorts enrolled across academic modules, and professors delivering lectures, the system simultaneously solves the classroom timetabling problem and minimizes total pedestrian walking distance across campus buildings.
+
+#### Hybrid Optimization Architecture:
+1. **Backtracking Constraint Satisfaction Problem (CSP)**:
+   - Uses depth-first backtracking search enhanced with the **Minimum Remaining Values (MRV)** heuristic (selecting modules with fewest valid time-room combinations first) and **Degree Heuristic** tie-breaking (prioritizing modules with the highest number of conflict constraints).
+   - Enforces hard feasibility constraints: no room overlaps, no professor double-booking, no student cohort conflicts, matching room types (`lecture` vs `lab`), and capacity limits ($\text{Capacity}_{\text{room}} \ge \sum \text{Students}$).
+2. **Simulated Annealing Metaheuristic (Distance Minimization)**:
+   - Evaluates the total walking distance traveled by all professors and students between consecutive scheduled classes according to the inter-building distance matrix.
+   - Iteratively perturbs time slot and room assignments and accepts improvements (or probabilistic uphill moves under geometric cooling) to find an optimal low-travel timetable.
+
+#### Datasets & Results:
+- **Input Spreadsheet**: `applications/timetable/travelling_student_timetable.xlsx` (containing relational sheets for `Rooms`, `Distances`, `TimeSlots`, `Courses`, and `Modules`).
+- **Benchmark Audit**: Saved in `applications/results/timetable_results.txt`:
+  - **Initial Distance**: $1,170\text{ metres}$
+  - **Optimised Distance**: $490\text{ metres}$
+  - **Travel Reduction**: **58.12%** reduction in total walking distance across campus.
+
+---
+
 ## Algorithm Complexity & Comparison
 
 | Algorithm | Paradigm | Time Complexity | Optimality Guarantee | Scalability |
 |:---|:---|:---:|:---:|:---|
 | **Brute Force** | Exact / Exhaustive | $O((n - 1)!)$ | Global optimum guaranteed | Small instances only ($n \le 12$) |
-| **Branch and Bound** | Exact / Pruned | Exponential (worst case) | Global optimum guaranteed | Moderate instances |
+| **Held-Karp DP** | Exact / Dynamic Programming | $O(n^2 2^n)$ | Global optimum guaranteed | Moderate instances ($n \le 20$) |
 | **HiGHS MILP (DFJ cuts)** | Exact / Mathematical Programming | Exponential (worst case) | Global optimum within tolerance | Fast on moderate instances ($n \le 50$) |
+| **Christofides** | Approximation (Metric TSP) | $O(n^3)$ | $\le 1.5 \times \text{OPT}$ guarantee | Large instances ($n \ge 1,000$) |
 | **Nearest Neighbour (NN)** | Greedy Constructive | $O(n^2)$ | None (local greedy choices) | Very fast ($n > 10,000$) |
 | **2-Opt (from NN)** | Local Search | $O(p \cdot n^2)$ | 2-optimal (local minimum) | Fast ($n \le 1,000$) |
 | **3-Opt (from NN)** | Local Search | $O(p \cdot n^3)$ | 3-optimal (local minimum) | Moderate ($n \le 200$) |
 | **Simulated Annealing** | Metaheuristic | $O(k \cdot n)$ | Near-optimal (asymptotically optimal) | Scales to large $n$ |
 | **Ant Colony Optimization** | Metaheuristic | $O(I \cdot m \cdot n^2)$ | Near-optimal heuristic | Scales to large $n$ |
+| **Travelling Student Solver** | Hybrid CSP + Metaheuristic | CSP Backtracking + $O(k \cdot n)$ SA | Feasible & distance-minimized | Practical campus schedules |
 
-*Notes: $n$ = number of cities; $p$ = number of scan passes until convergence; $k$ = annealing iterations (`tsp_loader.py` uses $k = \max(8000,\ 50n^2)$); $I$ = ACO iterations; $m$ = number of ants.*
+*Notes: $n$ = number of cities / nodes; $p$ = number of scan passes until convergence; $k$ = annealing iterations (`tsp_loader.py` uses $k = \max(8000,\ 50n^2)$); $I$ = ACO iterations; $m$ = number of ants.*
 
 ---
 
@@ -127,12 +169,15 @@ tsp/
 │
 ├── algorithm/
 │   ├── exact/
-│   │   ├── brute_force_visualized.py               # Exhaustive search with animated Matplotlib circular visualization
-│   │   ├── branch_and_bound.py                     # Exact branch-and-bound solver with partial-tour pruning
-│   │   └── data_visualization.py                   # 2D coordinate map plotter for city datasets
+│   │   ├── brute_force/
+│   │   │   ├── brute_force.py                      # Standalone exhaustive permutation solver
+│   │   │   └── brute_force_visualized.py           # Animated circular permutation visualizer
+│   │   └── dynamic_programming/
+│   │       ├── held_karp.py                        # Held-Karp exact DP algorithm (O(n^2 * 2^n))
+│   │       └── held_karp_visualized.py             # Interactive step-by-step Held-Karp visualizer
 │   │
 │   ├── approximation/                              # Approximation algorithms directory
-│   │   └── christofides.py                         # Christofides approximation algorithm
+│   │   └── christofides.py                         # Christofides 1.5-approximation algorithm
 │   │
 │   ├── heuristics/
 │   │   ├── nearest_neighbour.py                    # Nearest neighbour heuristic + HiGHS exact solver & report generator
@@ -147,12 +192,22 @@ tsp/
 │       ├── metaheuristic.py                        # Simulated Annealing and Ant Colony Optimization implementations
 │       └── simulated_annealing_visualized.py       # Animated Simulated Annealing visualizer with live convergence & GIF export
 │
+├── applications/                                   # Real-world optimization applications
+│   ├── travelling_student_problem.py               # Campus timetabling & room allocation solver (CSP + Simulated Annealing)
+│   ├── timetable/
+│   │   └── travelling_student_timetable.xlsx       # Multi-sheet Excel workbook (Rooms, Distances, Slots, Courses, Modules)
+│   └── results/
+│       └── timetable_results.txt                   # Baseline vs optimized schedule metrics & distance reduction
+│
 ├── utils/
 │   ├── tsp_charts.py                               # Matplotlib chart generator for per-dataset and scalability reports
 │   ├── tsp_data.py                                 # Unified dataset loader (Cartesian coordinates & symmetric distance matrices)
 │   ├── tsp_utils.py                                # Shared gap-formatting, tour list, and Markdown table helpers
-│   ├── xlsx_dictionary.py                          # Standalone data loader for symmetric Excel distance matrices
-│   └── xlsx_cartesian_dictionary.py                # Standalone data loader for 2D Cartesian coordinate Excel sheets
+│   ├── data_visualization_matplotlib.py            # Standalone 2D coordinate map plotter
+│   ├── xlsx_coordinates_dictionary.py              # Standalone Cartesian coordinate loader
+│   ├── xlsx_distances_dictionary.py                # Standalone symmetric distance loader
+│   ├── xlsx_dictionary.py                          # Data loader for symmetric Excel distance matrices
+│   └── xlsx_cartesian_dictionary.py                # Data loader for 2D Cartesian coordinate Excel sheets
 │
 ├── outputs/                                        # Generated Markdown reports and per-run CSV exports (created on first run)
 │   └── charts/                                     # Generated PNG charts and GIF animations
@@ -257,6 +312,15 @@ See [Output Reports](#output-reports) for what is measured and recorded.
 Each algorithm can also be executed standalone on any Cartesian coordinate (`coordinates_*.xlsx`) or distance matrix (`distances_*.xlsx`) dataset:
 
 ```bash
+# Dynamic Programming — Held-Karp exact solver (prompts for Excel filename & sheet)
+python algorithm/exact/dynamic_programming/held_karp.py
+
+# Brute-Force Permutation Search (prompts for Excel filename & sheet)
+python algorithm/exact/brute_force/brute_force.py
+
+# Christofides Algorithm (1.5-approximation on metric coordinates)
+python algorithm/approximation/christofides.py
+
 # Nearest Neighbour (constructs greedy tour and compares against exact MILP)
 python algorithm/heuristics/nearest_neighbour.py data/coordinates_20_cities.xlsx
 
@@ -265,9 +329,6 @@ python algorithm/heuristics/two_opt.py data/coordinates_20_cities.xlsx
 
 # 3-Opt Local Search (triplet reconnection refinement from a Nearest Neighbour tour)
 python algorithm/heuristics/three_opt.py data/coordinates_20_cities.xlsx
-
-# Branch and Bound (exact solver with pruning for small instances, e.g. n <= 10)
-python algorithm/exact/branch_and_bound.py data/coordinates_10_cities.xlsx
 
 # Metaheuristics (runs Simulated Annealing & Ant Colony Optimization with MILP baseline)
 python algorithm/metaheuristics/metaheuristic.py data/coordinates_20_cities.xlsx
@@ -280,6 +341,19 @@ python algorithm/metaheuristics/metaheuristic.py data/coordinates_80_cities.xlsx
 
 The repository provides graphical tools for interactive examination of tour progression and state spaces:
 
+- **Held-Karp Dynamic Programming Visualizer**:
+  Step-by-step graphical reconstruction of optimal subproblem tours:
+  ```bash
+  python algorithm/exact/dynamic_programming/held_karp_visualized.py
+  ```
+
+- **Brute-Force Permutation Visualizer**:
+  Animated circular layout demonstrating factorial permutation space in real time:
+  ```bash
+  python algorithm/exact/brute_force/brute_force_visualized.py
+  ```
+  *(Enter a distance matrix containing "London", e.g. `data/distances_20_cities.xlsx`. For $n > 10$, this serves as a live demonstration of factorial explosion—close the window when done observing.)*
+
 - **Constructive & Local Search Visualizers (Click-Through Step-by-Step)**:
   Interactive Matplotlib windows stepping through individual greedy choices or accepted edge swaps:
   ```bash
@@ -287,13 +361,6 @@ The repository provides graphical tools for interactive examination of tour prog
   python algorithm/heuristics/two_opt_visualization.py data/coordinates_10_cities.xlsx
   python algorithm/heuristics/three_opt_visualization.py data/coordinates_10_cities.xlsx
   ```
-
-- **Brute-Force Permutation Visualizer**:
-  Animated circular layout demonstrating factorial permutation space in real time:
-  ```bash
-  python algorithm/exact/brute_force_visualized.py
-  ```
-  *(Enter a distance matrix containing "London", e.g. `data/distances_20_cities.xlsx`. For $n > 10$, this serves as a live demonstration of factorial explosion—close the window when done observing.)*
 
 - **Simulated Annealing Animated Visualizer & GIF Exporter**:
   Real-time multi-panel visualization of temperature decay, tour untangling, and distance convergence:
@@ -308,6 +375,22 @@ The repository provides graphical tools for interactive examination of tour prog
   python algorithm/metaheuristics/simulated_annealing_visualized.py data/coordinates_80_cities.xlsx --save-gif outputs/charts/sa_80_cities.gif --frames 60
   ```
   *Key arguments: `--save-gif [PATH]` (headless GIF export), `--frames N` (frame count), `--nn-seed` (seed with NN tour), `--iter N` (iteration budget).*
+
+---
+
+### Running Real-World Applications
+
+To run the **Travelling Student Problem** university timetabling and distance-reduction optimizer:
+
+```bash
+python applications/travelling_student_problem.py
+```
+
+The script execution involves:
+1. **Constraint Loading**: Reads and validates room types, capacities, building distances, time slots, courses, and module requirements from `applications/timetable/travelling_student_timetable.xlsx`.
+2. **CSP Backtracking**: Solves for a feasible, conflict-free timetable using Minimum Remaining Values (MRV) and Degree heuristics.
+3. **Simulated Annealing Optimization**: Refines room assignments and time slots across 50,000 annealing iterations to minimize walking distance across campus.
+4. **Audit Reporting**: Outputs comparison metrics (initial distance, optimized distance, and a 58.12% travel reduction) to the console and logs detailed schedules to `applications/results/timetable_results.txt`.
 
 ---
 
@@ -335,7 +418,7 @@ The orchestrator (`tsp_loader.py`) also writes side-by-side comparison tables ac
 
 When multiple datasets of different city counts are evaluated in a run, `tsp_loader.py` also writes a combined scalability report featuring cross-problem line graphs:
 - **Runtime vs. Number of Cities**: Multi-line graph (logarithmic runtime scale) showing how execution time scales from small to large instances for each algorithm.
-- **Best Result vs. Number of Cities**: Multi-line graph displaying the percentage gap above the proven optimum ($(\text{distance} / \text{optimum} - 1) \times 100\%$) across all problem sizes. Methods that run only on small instances (Brute Force, Branch and Bound) are rendered as individual benchmark points.
+- **Best Result vs. Number of Cities**: Multi-line graph displaying the percentage gap above the proven optimum ($(\text{distance} / \text{optimum} - 1) \times 100\%$) across all problem sizes. Methods that run only on small instances (Brute Force, Held-Karp DP) are rendered as individual benchmark points.
 - **Summary Comparison Tables**: Side-by-side runtime and solution-quality tables across all evaluated city counts.
 
 All chart images are automatically generated via Matplotlib and saved to [`outputs/charts/`](outputs/charts).

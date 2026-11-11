@@ -1,24 +1,20 @@
 """
 Author: Oshanda Hembathanthrige
-
-Load and validate Cartesian coordinates and compute distance matrices from Excel.
 """
-# run this in terminal to install the required packages: py -m pip install pandas openpyxl
-from pathlib import Path
 import pandas as pd
+import matplotlib.pyplot as plt
+from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+project_root = Path(__file__).resolve().parents[2]
+
+PAD = 20 # empty space around the outermost points in pixels
+WINDOW_PARAMETER = 20  # the window size in inches
+PAUSE_TIME = 0.5  # time to pause between drawing lines in seconds
 
 # Read an Excel sheet with columns (Location, X, Y). Returns (coordinates, cities, distances), decimals=0 for easy computation.
-def load_distances(path, sheet_name=0, decimals=0):
-    resolved_path = Path(path)
-    if not resolved_path.exists():
-        for candidate in (PROJECT_ROOT / path, PROJECT_ROOT / "data" / path):
-            if candidate.exists():
-                resolved_path = candidate
-                break
+def load_distances(path, sheet_name, decimals=0):
     try:
-        data_frame = pd.read_excel(resolved_path, sheet_name=sheet_name)
+        data_frame = pd.read_excel(path, sheet_name=sheet_name)
     except FileNotFoundError:
         raise FileNotFoundError(f"File '{path}' not found. Check the name and folder, then try again.")
     # Remove completely empty rows
@@ -61,9 +57,65 @@ def load_distances(path, sheet_name=0, decimals=0):
 
     return coordinates, cities, distances
 
-filename = input("Enter the Excel filename: ")
-coordinates, cities, distances = load_distances(filename)
+# load data from Excel file
+filename = input("Enter the Excel filename : ")
+sheet_number = int(input("Enter the Excel sheet number (1 to 5) : ")) - 1
+file_path = project_root/"data"/filename
+if sheet_number < 0 or sheet_number > 4:
+    raise ValueError(f'Invalid sheet number')
+coordinates, cities, distances = load_distances(file_path, sheet_number)
 
-print(coordinates)
-print(cities)
-print(distances)
+# global variables for the figure, canvas, and lines
+figure = None
+canvas = None
+lines = []
+
+# create the window and draw every location as a dot with its name
+def draw_map(WINDOW_PARAMETER, PAD):
+    global figure, canvas
+    plt.ion()
+    # extract the x and y coordinates from the dictionary
+    xs = [x for x, y in coordinates.values()]
+    ys = [y for x, y in coordinates.values()]
+    # figure out the width and height of the window
+    min_x, max_x = min(xs), max(xs)
+    min_y, max_y = min(ys), max(ys)
+    width = (max_x - min_x) + 2 * PAD
+    height = (max_y - min_y) + 2 * PAD
+    scale = WINDOW_PARAMETER/(width+height)
+    figure, canvas = plt.subplots(figsize=(width * scale, height * scale))
+
+    # set the view limits and aspect ratio of the x,y axes
+    canvas.set_xlim(min_x - PAD, max_x + PAD)
+    canvas.set_ylim(min_y - PAD, max_y + PAD)
+    canvas.set_aspect("equal")
+
+    for name, (x, y) in coordinates.items():
+        canvas.plot(x, y, "o", color="black", zorder=3)
+        canvas.annotate(name, (x, y), xytext=(6, 0), textcoords="offset points", va="center", zorder=3)
+
+    plt.show()
+    plt.pause(PAUSE_TIME)
+
+
+# draw a line between two cities
+def draw_line(city_1, city_2):
+    (x1, y1), (x2, y2) = coordinates[city_1], coordinates[city_2]
+    line, = canvas.plot([x1, x2], [y1, y2], color="red", linewidth=2, zorder=1)
+    lines.append(line)
+    figure.canvas.draw_idle()
+    plt.pause(PAUSE_TIME)
+
+
+# remove only the lines
+def clear_lines():
+    for line in lines:
+        line.remove()
+    lines.clear()
+    figure.canvas.draw_idle()
+    plt.pause(PAUSE_TIME)
+
+draw_map(WINDOW_PARAMETER, PAD)
+
+plt.ioff()
+plt.show()
