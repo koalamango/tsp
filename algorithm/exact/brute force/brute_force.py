@@ -51,7 +51,7 @@ def load_distances(path, sheet_name, decimals=0):
     return coordinates, cities, distances
 
 # Load the locations and the distance matrix
-filename = input("Enter the Excel filename : ")
+filename = input("Enter the Excel filename (ex: coordinates_10_cities.xlsx) : ")
 sheet_number = int(input("Enter the Excel sheet number (1 to 5) : ")) - 1
 file_path = project_root/"data"/filename
 if sheet_number < 0 or sheet_number > 4:
