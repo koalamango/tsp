@@ -405,8 +405,7 @@ best_timetable, best_distance = simulated_annealing(initial_timetable)
 
 # open text file and save results inside it
 with open("results/timetable_results.txt", "w") as f:
-    print("\nInitial total distance:", initial_distance, "metres", file=f)
-    print("Initial distance:", initial_distance, "metres", file=f)
+    print("\nInitial distance:", initial_distance, "metres", file=f)
     print("Optimised distance:", best_distance, "metres", file=f)
     # check for zero devision error and unrialistic values
     if initial_distance > 0:
