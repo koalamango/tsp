@@ -7,10 +7,10 @@ The project provides implementations ranging from exact solvers (brute-force per
 ---
 
 ## Contributors
-- **Richard Clark** 
-- **Oshanda Hembathanthrige** 
-- **Tyrone Sequeira**
-- **Jessie W**
+- **Richard Clark** (Heuristics)
+- **Oshanda Hembathanthrige** (Exact Methods)
+- **Tyrone Sequeira** (Approximation)
+- **Jessie W** (Metaheuristics)
 
 ## Table of Contents
 
