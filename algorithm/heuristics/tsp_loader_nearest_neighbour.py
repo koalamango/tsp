@@ -1,6 +1,6 @@
 """Nearest-neighbour variant of tsp_loader for all sheets in a coordinate workbook.
 
-Run: python tsp_loader_nearest_neighbour.py [--runs 10]
+Run: python algorithm/heuristics/tsp_loader_nearest_neighbour.py [--runs 10]
 Prints results and saves a Markdown report in outputs/.
 """
 from __future__ import annotations
@@ -8,21 +8,23 @@ from __future__ import annotations
 import argparse
 import math
 import statistics
+import sys
 from pathlib import Path
 from time import perf_counter
 
 from openpyxl import load_workbook
 
-from nearest_neighbour import (
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from algorithm.heuristics.nearest_neighbour import (
     build_euclidean_matrix,
     exact_route,
     nearest_neighbour,
     route_length,
 )
-from tsp_utils import markdown_table
-
-
-ROOT = Path(__file__).resolve().parent
+from utils.tsp_utils import markdown_table
 
 
 def load_sheets(path):
