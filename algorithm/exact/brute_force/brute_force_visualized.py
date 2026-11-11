@@ -1,344 +1,155 @@
-"""
-Author: Oshanda Hembathanthrige
-"""
-
 import itertools
-import math
-from pathlib import Path
-import time
 import pandas as pd
 import matplotlib.pyplot as plt
+from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+project_root = Path(__file__).resolve().parents[3]
 
-# Time between iterations
-ITERATION_DELAY = 0
+PAD = 20 # empty space around the outermost points in pixels
+WINDOW_PARAMETER = 20  # the window size in inches
+PAUSE_TIME = 0.2  # time to pause between drawing lines in seconds
 
+# Read an Excel sheet with columns (Location, X, Y). Returns (coordinates, cities, distances), decimals=0 for easy computation.
+def load_distances(path, sheet_name, decimals=0):
+    try:
+        data_frame = pd.read_excel(path, sheet_name=sheet_name)
+    except FileNotFoundError:
+        raise FileNotFoundError(f"File '{path}' not found. Check the name and folder, then try again.")
+    # Remove completely empty rows
+    data_frame = data_frame.dropna(how="all")
+    # Check that every row has a name
+    if data_frame[data_frame.columns[0]].isna().any():
+        raise ValueError("A row without a name")
+    # Remove empty spaces from city names (Ex: " Canary wharf " -> "Canary wharf")
+    data_frame[data_frame.columns[0]] = data_frame[data_frame.columns[0]].astype(str).str.strip()
+    # Check for duplicate city names
+    if data_frame[data_frame.columns[0]].duplicated().any():
+        dupes = list(data_frame.loc[data_frame[data_frame.columns[0]].duplicated(), data_frame.columns[0]])
+        raise ValueError(f"Duplicate locations: {dupes}")
+    # Check for different cities sharing the same X, Y position
+    same_position = data_frame[data_frame.duplicated(subset=[data_frame.columns[1], data_frame.columns[2]], keep=False)]
+    if not same_position.empty:
+        raise ValueError("Cities with the same X, Y: " + ", ".join(f"{row[0]} ({row[1]}, {row[2]})" for row in same_position.values))
+    # Convert X and Y to numbers and text or empty cells are reported
+    data_frame[data_frame.columns[1]] = pd.to_numeric(data_frame[data_frame.columns[1]], errors="coerce")
+    data_frame[data_frame.columns[2]] = pd.to_numeric(data_frame[data_frame.columns[2]], errors="coerce")
+    bad = data_frame[data_frame[data_frame.columns[1]].isna() | data_frame[data_frame.columns[2]].isna()]
+    if not bad.empty:
+        raise ValueError(f"X and Y must be numbers. Problem with: {list(bad[data_frame.columns[0]])}")
 
-# 1. Read the Excel distance matrix
-def load_distance(path, sheet_name=0):
-    resolved_path = Path(path)
-    if not resolved_path.exists():
-        for candidate in (PROJECT_ROOT / path, PROJECT_ROOT / "data" / path):
-            if candidate.exists():
-                resolved_path = candidate
-                break
+    cities = list(data_frame[data_frame.columns[0]])
+    coordinates = {row[0]: (float(row[1]), float(row[2])) for row in data_frame.values}
+    distances = {c: {} for c in cities}
 
-    df = pd.read_excel(resolved_path, sheet_name=sheet_name, index_col=0)
+    for index, city_1 in enumerate(cities):
+        for city_2 in cities[index + 1:]:
+            # Straight distance between the two points
+            distance = ((coordinates[city_1][0] - coordinates[city_2][0])**2 + (coordinates[city_1][1] - coordinates[city_2][1])**2)**0.5
+            distance = round(distance, decimals)
+            # If the distance is a whole number, convert it to an integer
+            if distance.is_integer():
+                distance = int(distance)
+            # Add the distance to the dictionary and mirror it for the symmetric property
+            distances[city_1][city_2] = distance
+            distances[city_2][city_1] = distance
 
-    df.columns = [str(c).strip() for c in df.columns]
-    df.index = [str(i).strip() for i in df.index]
+    return coordinates, cities, distances
 
-    if set(df.columns) != set(df.index):
-        raise ValueError("Row and column city names don't match")
+# Load the locations and the distance matrix
+sheet_number = int(input("Enter the Excel sheet number (1 to 5) : ")) - 1
+file_path = project_root/"data"/"coordinates_5_cities.xlsx"
+if sheet_number < 0 or sheet_number > 4:
+    raise ValueError(f'Invalid sheet number')
 
-    cities = list(df.columns)
-    distances = {city: {} for city in cities}
+coordinates, cities, distances = load_distances(file_path, sheet_number)
 
-    for a in cities:
-        for b in cities:
+# global variables for the figure, canvas, and lines
+figure = None
+canvas = None
+lines = []
 
-            value = df.loc[a, b]
-
-            if a == b or pd.isna(value):
-                continue
-
-            d = float(value)
-
-            if d.is_integer():
-                d = int(d)
-
-            if b in distances[a] and distances[a][b] != d:
-                raise ValueError(f"Conflict for {a}-{b}")
-
-            distances[a][b] = d
-            distances[b][a] = d
-
-    return cities, distances
-
-
-# 2. Arrange cities equally around a circle
-def create_visualisation(cities):
-
-    number_of_cities = len(cities)
-    positions = {}
-
-    for i, city in enumerate(cities):
-
-        angle = math.pi / 2 - (
-            2 * math.pi * i / number_of_cities
-        )
-
-        x = math.cos(angle)
-        y = math.sin(angle)
-
-        positions[city] = (x, y)
-
+# create the window and draw every location as a dot with its name
+def draw_map(WINDOW_PARAMETER, PAD):
+    global figure, canvas
     plt.ion()
-
-    fig, ax = plt.subplots(figsize=(9, 9))
-
-    ax.set_aspect("equal")
-    ax.set_xlim(-1.35, 1.35)
-    ax.set_ylim(-1.35, 1.35)
-    ax.axis("off")
-
-    # Draw all nodes
-    for city, (x, y) in positions.items():
-
-        ax.scatter(x, y, s=650, zorder=3)
-
-        ax.text(
-            x * 1.13,
-            y * 1.13,
-            city,
-            ha="center",
-            va="center",
-            fontsize=10
-        )
-
-    # Route line
-    route_line, = ax.plot(
-        [],
-        [],
-        linewidth=2.5,
-        zorder=2
-    )
-
-    # Iteration information
-    info_text = ax.text(
-        0.02,
-        0.02,
-        "",
-        transform=ax.transAxes,
-        fontsize=11,
-        va="bottom"
-    )
-
-    fig.tight_layout()
-    plt.show(block=False)
-
-    return fig, ax, positions, route_line, info_text
-
-
-# 3. Calculate the distance of a complete route
-def calculate_route_distance(route, distances):
-
-    total = 0
-
-    for i in range(len(route) - 1):
-
-        from_city = route[i]
-        to_city = route[i + 1]
-
-        total += distances[from_city][to_city]
-
-    return total
-
-
-# 4. Draw the current route
-def display_route(
-    route,
-    distance,
-    iteration,
-    total_iterations,
-    positions,
-    route_line,
-    info_text,
-    fig
-):
-
-    x_values = [
-        positions[city][0] for city in route
-    ]
-
-    y_values = [
-        positions[city][1] for city in route
-    ]
-
-    # Update connecting lines
-    route_line.set_data(x_values, y_values)
-
-    # Update iteration information
-    info_text.set_text(
-        f"Iteration: {iteration:,} / {total_iterations:,}\n"
-        f"Current route distance: {distance:,.2f}"
-    )
-
-    fig.canvas.draw_idle()
-    fig.canvas.flush_events()
-
-    # Wait 0.1 seconds
-    plt.pause(ITERATION_DELAY)
-
-
-# 5. Brute-force search
-def brute_force_search(cities, distances, start_city=None, visualize=False):
-
-    if start_city is None:
-        start_city = cities[0]
-
-    if start_city not in cities:
-        raise ValueError(
-            f"Starting city '{start_city}' was not found."
-        )
-
-    other_cities = [
-        city for city in cities if city != start_city
-    ]
-
-    # Check all distances exist
-    for a in cities:
-        for b in cities:
-
-            if a != b and b not in distances[a]:
-
-                raise ValueError(
-                    f"Missing distance between {a} and {b}"
-                )
-
-    # Initialise best route
-    best_route = None
-    min_distance = float("inf")
-
-    # Calculate total number of permutations
-    total_iterations = math.factorial(len(other_cities))
-
-    # Create visualisation if enabled
-    if visualize:
-        fig, ax, positions, route_line, info_text = (
-            create_visualisation(cities)
-        )
-
-        print(f"Total routes to check: {total_iterations:,}")
-        print("Close the visualisation window to stop the program.")
-
-    # Brute-force search
-    for iteration, perm in enumerate(
-        itertools.permutations(other_cities),
-        start=1
-    ):
-
-        # Construct complete route
-        current_route = (
-            [start_city] + list(perm) + [start_city]
-        )
-
-        # Calculate total distance
-        current_distance = calculate_route_distance(
-            current_route,
-            distances
-        )
-
-        # Update shortest route
-        if current_distance < min_distance:
-
-            min_distance = current_distance
-            best_route = current_route.copy()
-
-        if visualize:
-            # Visualise current iteration
-            display_route(
-                current_route,
-                current_distance,
-                iteration,
-                total_iterations,
-                positions,
-                route_line,
-                info_text,
-                fig
-            )
-
-            # Stop if window is closed
-            if not plt.fignum_exists(fig.number):
-
-                print("Visualisation window closed. Search stopped early.")
-                break
-
-    # Display optimal route if visualising
-    if visualize:
-        if best_route is not None:
-
-            best_x = [
-                positions[city][0] for city in best_route
-            ]
-
-            best_y = [
-                positions[city][1] for city in best_route
-            ]
-
-            route_line.set_data(best_x, best_y)
-            route_line.set_linewidth(4)
-
-            info_text.set_text(
-                f"OPTIMAL ROUTE\n"
-                f"{' -> '.join(best_route)}\n"
-                f"Minimum distance: {min_distance:,.2f}"
-            )
-
-            ax.set_title(
-                "Brute Force TSP - Optimal Route",
-                fontsize=14
-            )
-
-            fig.canvas.draw_idle()
-            fig.canvas.flush_events()
-
-            print("\nOptimal Route:")
-            print(" -> ".join(best_route))
-
-            print(f"Minimum Distance: {min_distance} miles")
-
-            plt.ioff()
-            plt.show()
-
-        else:
-            plt.close(fig)
-
-    return best_route, min_distance, total_iterations
-
-
-def dict_from_matrix(cities, dist_matrix):
-    """Convert an n x n numeric distance matrix into a nested city-name dictionary."""
-    return {
-        c1: {c2: dist_matrix[i][j] for j, c2 in enumerate(cities) if i != j}
-        for i, c1 in enumerate(cities)
-    }
-
-
-def run_brute_force(cities, dist_matrix):
-    """Run an exact brute-force search and return benchmark metrics with integer route indices."""
-    distances = dict_from_matrix(cities, dist_matrix)
-    city_to_idx = {city: idx for idx, city in enumerate(cities)}
-
-    t_start = time.perf_counter()
-    best_route_names, min_dist, total_permutations = brute_force_search(
-        cities,
-        distances,
-        start_city=cities[0],
-        visualize=False,
-    )
-    exec_time = time.perf_counter() - t_start
-
-    best_route = [city_to_idx[name] for name in best_route_names] if best_route_names else None
-
-    return {
-        "route": best_route,
-        "distance": min_dist,
-        "time_sec": exec_time,
-        "permutations": total_permutations,
-    }
-
-
-if __name__ == "__main__":
-    # Load Excel file
-    filename = input("Enter the Excel filename: ").strip().strip('"')
-
-    cities, distances = load_distance(filename)
-
-    brute_force_search(
-        cities,
-        distances,
-        start_city="London",
-        visualize=True
-    )
+    # extract the x and y coordinates from the dictionary
+    xs = [x for x, y in coordinates.values()]
+    ys = [y for x, y in coordinates.values()]
+    # figure out the width and height of the window
+    min_x, max_x = min(xs), max(xs)
+    min_y, max_y = min(ys), max(ys)
+    width = (max_x - min_x) + 2 * PAD
+    height = (max_y - min_y) + 2 * PAD
+    scale = WINDOW_PARAMETER/(width+height)
+    figure, canvas = plt.subplots(figsize=(width * scale, height * scale))
+
+    # set the view limits and aspect ratio of the x,y axes
+    canvas.set_xlim(min_x - PAD, max_x + PAD)
+    canvas.set_ylim(min_y - PAD, max_y + PAD)
+    canvas.set_aspect("equal")
+
+    for name, (x, y) in coordinates.items():
+        canvas.plot(x, y, "o", color="black", zorder=3)
+        canvas.annotate(name, (x, y), xytext=(6, 0), textcoords="offset points", va="center", zorder=3)
+
+    plt.show()
+    plt.pause(PAUSE_TIME)
+
+
+# draw a line between two cities
+def draw_line(city_1, city_2):
+    (x1, y1), (x2, y2) = coordinates[city_1], coordinates[city_2]
+    line, = canvas.plot([x1, x2], [y1, y2], color="red", linewidth=2, zorder=1)
+    lines.append(line)
+    figure.canvas.draw_idle()
+    plt.pause(PAUSE_TIME)
+
+
+# remove only the lines
+def clear_lines():
+    for line in lines:
+        line.remove()
+    lines.clear()
+    figure.canvas.draw_idle()
+    plt.pause(PAUSE_TIME)
+
+draw_map(WINDOW_PARAMETER, PAD)
+
+# Lock the starting location and find the remaining targets
+start_city = 'London'
+other_cities = [c for c in cities if c != start_city]
+
+best_route = None
+min_distance = float('inf')
+
+# Use brute force to check every possible permutation of the route
+for perm in itertools.permutations(other_cities):
+    # Construct a complete round-trip loop
+    current_route = [start_city] + list(perm) + [start_city]
+    current_distance = 0
+    clear_lines()
+    # Accumulate the leg distances for the path
+    for i in range(len(current_route) - 1):
+        from_city = current_route[i]
+        to_city = current_route[i+1]
+        draw_line(from_city, to_city)
+        current_distance += distances[from_city][to_city]
+        
+    # Track the absolute shortest loop found so far
+    if current_distance < min_distance:
+        min_distance = current_distance
+        best_route = current_route
+
+clear_lines()
+#Draw the best route
+for i in range(len(best_route) - 1):
+    from_city = best_route[i]
+    to_city = best_route[i+1]
+    draw_line(from_city, to_city)
+
+# Output the results
+print(f"Optimal Route: {' -> '.join(best_route)}")
+print(f"Minimum Distance: {min_distance} miles")
+
+plt.ioff()
+plt.show()

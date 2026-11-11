@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+import itertools
 import math
 import random
 import re
@@ -73,7 +74,6 @@ from algorithm.metaheuristics.metaheuristic import (
     solve_tsp_sa,
     solve_tsp_aco,
 )
-from algorithm.exact.brute_force.brute_force_visualized import run_brute_force
 from algorithm.exact.dynamic_programming.held_karp import run_held_karp
 from utils.tsp_charts import (
     save_distance_bar_chart,
@@ -94,7 +94,7 @@ DEFAULT_SEED = 42
 EXACT_ALGORITHM = "Exact MILP (HiGHS)"
 CHARTS_DIRNAME = "charts"  # Sub-folder of outputs/ holding the PNG charts linked from the reports
 
-# Default Cartesian datasets evaluated in sequence: (filepath, run_brute_force_and_bb)
+# Default Cartesian datasets evaluated in sequence: (filepath, run_exact_solvers)
 CARTESIAN_SUITES: List[Tuple[str, bool]] = [
     ("data/coordinates_10_cities.xlsx", True),
     ("data/coordinates_20_cities.xlsx", False),
@@ -123,6 +123,28 @@ def estimate_exact_times(n: int) -> Tuple[str, str, int]:
     hk_seconds = hk_ops / 2_000_000.0
 
     return format_duration(bf_seconds), format_duration(hk_seconds), perms
+
+
+def run_brute_force(dist_matrix: List[List[float]], start: int = 0) -> List[int]:
+    """Exhaustive brute-force permutation search (matching algorithm/exact/brute_force/brute_force.py logic)."""
+    n = len(dist_matrix)
+    if n <= 1:
+        return [0, 0] if n == 1 else []
+
+    other_cities = [i for i in range(n) if i != start]
+    best_route = None
+    min_distance = float("inf")
+
+    for perm in itertools.permutations(other_cities):
+        current_route = [start] + list(perm) + [start]
+        current_distance = 0.0
+        for i in range(n):
+            current_distance += dist_matrix[current_route[i]][current_route[i + 1]]
+        if current_distance < min_distance:
+            min_distance = current_distance
+            best_route = current_route
+
+    return best_route if best_route is not None else [start, start]
 
 
 def slugify(text: str) -> str:
@@ -265,7 +287,7 @@ def run_benchmarks(
     cities: List[str],
     dist_matrix: List[List[float]],
     run_exact: bool = True,
-    run_bf: bool = True,
+    run_exact_solvers: bool = True,
     runs: int = DEFAULT_RUNS,
     seed: int = DEFAULT_SEED,
     sa_params: Optional[SAParams] = None,
@@ -404,12 +426,12 @@ def run_benchmarks(
                  deterministic=deterministic, includes_nn_time=includes_nn)
 
     # Optional: Exact Solvers under algorithm/exact (Brute Force & Dynamic Programming)
-    if run_bf:
+    if run_exact_solvers:
         bonus_steps = [
             (
                 f"[Bonus] Brute Force ({math.factorial(n - 1):,} permutations)",
                 f"Brute Force ({n} cities)",
-                lambda _i: (run_brute_force(cities, dist_matrix)["route"], None),
+                lambda _i: (run_brute_force(dist_matrix), None),
             ),
             (
                 f"[Bonus] Dynamic Programming (Held-Karp)",
@@ -626,7 +648,7 @@ def write_markdown_report(
         "- **Simulated Annealing & Ant Colony:** Stochastic metaheuristics for escaping local optima. "
         "Simulated Annealing iterations scale as max(8000, 50·n²) with a data-calibrated start temperature.",
         "- **Dynamic Programming (Held-Karp):** Computes exact global optimum via Bellman-Held-Karp subproblem memoization ($O(n^2 2^n)$).",
-        "- **Brute Force:** Evaluates all $(n - 1)!$ permutations.",
+        "- **Brute Force:** Evaluates all $(n - 1)!$ permutations (`algorithm/exact/brute_force/brute_force.py`).",
         "- **Deterministic algorithms** (everything except Simulated Annealing and Ant Colony) return the same tour every run; only their runtime varies.",
         "- **Warm-up:** each algorithm is run once before timing starts and that run is discarded, so one-off start-up costs do not skew the statistics.",
         "",
@@ -750,7 +772,7 @@ def evaluate_suite(
     cities: List[str],
     dist_matrix: List[List[float]],
     run_exact: bool = True,
-    run_bf: bool = True,
+    run_exact_solvers: bool = True,
     runs: int = DEFAULT_RUNS,
     seed: int = DEFAULT_SEED,
     slug: Optional[str] = None,
@@ -763,7 +785,7 @@ def evaluate_suite(
         cities,
         dist_matrix,
         run_exact=run_exact,
-        run_bf=run_bf,
+        run_exact_solvers=run_exact_solvers,
         runs=runs,
         seed=seed,
         sa_params=sa_params,
@@ -837,13 +859,13 @@ def main() -> None:
             cities, dist_matrix, dataset_type = load_tsp_data(str(path))
             n = len(cities)
             # Brute-force & Dynamic Programming (Held-Karp) are exact searches under algorithm/exact evaluated for small instances (n <= 10)
-            run_bf = n <= 10
+            run_exact_solvers = n <= 10
             summaries.append(evaluate_suite(
                 f"{dataset_type} ({n} Cities) - {path.name}",
                 cities,
                 dist_matrix,
                 run_exact=not args.no_exact,
-                run_bf=run_bf,
+                run_exact_solvers=run_exact_solvers,
                 runs=args.runs,
                 seed=args.seed,
                 slug=path.stem,
