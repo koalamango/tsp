@@ -74,7 +74,27 @@ from algorithm.metaheuristics.metaheuristic import (
     solve_tsp_sa,
     solve_tsp_aco,
 )
-from algorithm.exact.dynamic_programming.held_karp import run_held_karp
+import algorithm.exact.dynamic_programming.held_karp as held_karp_module
+from algorithm.exact.dynamic_programming.held_karp import held_karp
+
+
+def run_held_karp(cities: List[str], dist_matrix: List[List[float]]) -> Dict:
+    """Robust runner for Held-Karp DP that calls held_karp(cities, distances) directly."""
+    distances = {
+        c1: {c2: dist_matrix[i][j] for j, c2 in enumerate(cities)}
+        for i, c1 in enumerate(cities)
+    }
+    cost, route_cities = held_karp(cities, distances)
+    city_to_idx = {city: idx for idx, city in enumerate(cities)}
+    route_indices = [city_to_idx[c] for c in route_cities]
+    return {
+        "route": route_indices,
+        "distance": cost,
+        "states": len(cities) * (1 << len(cities)),
+    }
+
+
+held_karp_module.run_held_karp = run_held_karp
 from utils.tsp_charts import (
     save_distance_bar_chart,
     save_runtime_bar_chart,
