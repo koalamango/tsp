@@ -49,74 +49,80 @@ def load_distances(path, sheet_name, decimals=0):
 
     return coordinates, cities, distances
 
-def held_karp(cities, distances, start=0):
+# input: cities (list of city names), distances (dictionary of distances between cities)
+# return: minimum distance and the ordered sequence of city names in the optimal route
+def held_karp(cities, distances):
     number_of_cities = len(cities)
-    # Create a distance matrix for the cities based on the distances dictionary
-    distance_matrix = [[0 if i == j else distances[cities[i]][cities[j]] for j in range(number_of_cities)] for i in range(number_of_cities)]
+    
+    # build a 2D distance matrix
+    distance_matrix = [[0 if city_1 == city_2 else distances[cities[city_1]][cities[city_2]] for city_2 in range(number_of_cities)] for city_1 in range(number_of_cities)]
     
     INF = float('inf')
-    number_of_subsets = range(2**number_of_cities)
-    # create a 2D list to store the minimum cost to reach each city
-    cost_matrix = [[INF] * number_of_cities for subset in number_of_subsets]
-    # create a 2D list to store the parent city for each city
-    parent_matrix = [[-1] * number_of_cities for subset in number_of_subsets]
+    number_of_subsets = 2 ** number_of_cities
+    
+    # 2D tables where rows represent different combinations and columns represent last visited cities
+    cost_matrix = [[INF] * number_of_cities for subset in range(number_of_subsets)]
+    # 2D table to track the parent city for each city in each subset
+    parent_matrix = [[-1] * number_of_cities for subset in range(number_of_subsets)]
 
+    # set the base case cost to 0 for starting at first location
     cost_matrix[1][0] = 0
 
-    for subset in number_of_subsets:
-        if not subset & (1 << start):
-            continue
-        for city_1 in range(number_of_cities):
-            if not subset & (1 << city_1) or cost_matrix[subset][city_1] == INF:
-                continue
-            for city_2 in range(number_of_cities):
-                if subset & (1 << city_2):
-                    continue
-                next_subset = subset | (2**city_2)
-                cost = cost_matrix[subset][city_1] + distance_matrix[city_1][city_2]
-                if cost < cost_matrix[next_subset][city_2]:
-                    cost_matrix[next_subset][city_2] = cost
-                    parent_matrix[next_subset][city_2] = city_1
+    # consider all posible subset of given location list (Ex: binary subset value 1011 represent locations 3, 1, and 0)
+    for subset in range(number_of_subsets):
+        # check if the starting city is included in the subset (Ex: 1101 & 1 = True, 1100 & 1 = False)
+        if subset & 1:
+            for city_1 in range(number_of_cities):
+                # check if the current city is included in the subset (Ex: 1101 & 100 = True, 1101 & 10 = False), and has a valid cost
+                if (subset & (2 ** city_1)) and (cost_matrix[subset][city_1] != INF):
+                    for city_2 in range(number_of_cities):
+                        # check if the next city is not included in the subset (Ex: not(1101 & 10) = True, not(1101 & 100) = False)
+                        if not (subset & (2 ** city_2)):
+                            # calculate next subset (Ex: 1101 | 10 = 1111), and cost
+                            next_subset = subset | (2 ** city_2)
+                            cost = cost_matrix[subset][city_1] + distance_matrix[city_1][city_2]
+                            # update cost if the new cost is lower than the previously recorded cost
+                            if cost < cost_matrix[next_subset][city_2]:
+                                cost_matrix[next_subset][city_2] = cost
+                                parent_matrix[next_subset][city_2] = city_1
 
-    full = (1 << number_of_cities) - 1
-    best, last = INF, -1
-    for j in range(number_of_cities):
-        if j != start and cost_matrix[full][j] + distance_matrix[j][start] < best:
-            best, last = cost_matrix[full][j] + distance_matrix[j][start], j
+    # iterate through all ending cities, add their return cost to starting location
+    last_subset = (2 ** number_of_cities) - 1
+    minimum_distance, last_city = INF, -1
+    
+    for city in range(number_of_cities):
+        if city != 0:
+            return_cost = cost_matrix[last_subset][city] + distance_matrix[city][0]
+            if return_cost < minimum_distance:
+                minimum_distance, last_city = return_cost, city
 
-    # reconstruct
-    path, mask, j = [], full, last
-    while j != -1:
-        path.append(j)
-        pj = parent_matrix[mask][j]
-        mask ^= (1 << j)
-        j = pj
-    path.reverse()
-    return best, [cities[i] for i in path] + [cities[start]]
+    # backtrack through the parent matrix to get the complete tour
+    route, subset, city = [], last_subset, last_city
+    while city != -1:
+        route.append(city)
+        previous_city = parent_matrix[subset][city]
+        # calculate previous subset by removing the current city from the subset (Ex: 1111 ^ 10 = 1101)
+        subset = subset^(2 ** city)
+        city = previous_city
+        
+    route.reverse()
+    
+    # Return the minimum total cost and the ordered sequence of city names
+    return minimum_distance, [cities[i] for i in route] + [cities[0]]
 
-
+# For benchmarking
 def run_held_karp(cities, dist_matrix):
-    """Run exact Held-Karp dynamic programming and return benchmark metrics."""
     import time
     t_start = time.perf_counter()
-    distances = {
-        c1: {c2: dist_matrix[i][j] for j, c2 in enumerate(cities) if i != j}
-        for i, c1 in enumerate(cities)
-    }
+    distances = {c1: {c2: dist_matrix[i][j] for j, c2 in enumerate(cities) if i != j} for i, c1 in enumerate(cities)}
     cost, route_cities = held_karp(cities, distances, start=0)
     exec_time = time.perf_counter() - t_start
     city_to_idx = {city: idx for idx, city in enumerate(cities)}
     route_indices = [city_to_idx[c] for c in route_cities]
-    return {
-        "route": route_indices,
-        "distance": cost,
-        "time_sec": exec_time,
-        "states": len(cities) * (1 << len(cities)),
-    }
-
+    return {"route": route_indices, "distance": cost, "time_sec": exec_time, "states": len(cities) * (1 << len(cities)),}
 
 def main():
-    filename = input("Enter the Excel filename : ")
+    filename = input("Enter the Excel filename (ex: coordinates_10_cities.xlsx) : ")
     sheet_number = int(input("Enter the Excel sheet number (1 to 5) : ")) - 1
     file_path = project_root/"data"/filename
     if sheet_number < 0 or sheet_number > 4:
@@ -126,7 +132,6 @@ def main():
     cost, route = held_karp(cities, distances)
     print("Minimum distance:", cost)
     print(" -> ".join(route))
-
 
 if __name__ == "__main__":
     main()
