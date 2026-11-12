@@ -1,6 +1,7 @@
 """
-Author: Oshanda Hembathanthrige
+Author: Oshanda Fernando
 """
+
 # run this in terminal to install the required packages: py -m pip install pandas openpyxl
 import pandas as pd
 from pathlib import Path
