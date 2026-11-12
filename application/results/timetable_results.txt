@@ -1,0 +1,226 @@
+
+Initial distance: 1170 metres
+Optimised distance: 490 metres
+Distance reduction: 58.12 %
+
+
+========== INITIAL RESULTS ==========
+-------------------------------------
+Module: EPM102
+Start time: 10:00
+Duration: 2 hour(s)
+Room: CG01
+Room type: lecture
+Professor: Wang
+Students: ['PSAUSY']
+-------------------------------------
+Module: EPM301
+Start time: 10:00
+Duration: 2 hour(s)
+Room: C102
+Room type: lab
+Professor: Aouf
+Students: ['PSCEST', 'PSPMFR']
+-------------------------------------
+Module: EPM302
+Start time: 10:00
+Duration: 2 hour(s)
+Room: C103
+Room type: lab
+Professor: Razavi
+Students: ['PSFITE']
+-------------------------------------
+Module: EPM202
+Start time: 11:00
+Duration: 1 hour(s)
+Room: CG02
+Room type: lecture
+Professor: Stupples
+Students: ['PSAEST', 'PSAMEE']
+-------------------------------------
+Module: EPM110
+Start time: 12:00
+Duration: 2 hour(s)
+Room: CG02
+Room type: lecture
+Professor: Aouf
+Students: ['PSAUSY', 'PSAEST']
+-------------------------------------
+Module: EPM201
+Start time: 12:00
+Duration: 2 hour(s)
+Room: BG02
+Room type: lecture
+Professor: Stupples
+Students: ['PSAMEE']
+-------------------------------------
+Module: EPM303
+Start time: 12:00
+Duration: 2 hour(s)
+Room: B102
+Room type: lab
+Professor: Zenati
+Students: ['PSPMFR']
+-------------------------------------
+Module: EPM111
+Start time: 14:00
+Duration: 2 hour(s)
+Room: C102
+Room type: lab
+Professor: Hickling
+Students: ['PSAUSY', 'PSPMFR']
+-------------------------------------
+Module: EPM203
+Start time: 14:00
+Duration: 2 hour(s)
+Room: BG01
+Room type: lecture
+Professor: Zenati
+Students: ['PSAMEE']
+-------------------------------------
+Module: EPM204
+Start time: 16:00
+Duration: 1 hour(s)
+Room: AG01
+Room type: lecture
+Professor: Wang
+Students: ['PSPMFR', 'PSAMEE']
+-------------------------------------
+Module: EPM103
+Start time: 17:00
+Duration: 1 hour(s)
+Room: BG03
+Room type: lab
+Professor: Razavi
+Students: ['PSAUSY']
+-------------------------------------
+
+---------- INDIVIDUAL DISTANCES ----------
+
+Aouf : 55 metres
+Hickling : 0 metres
+PSAEST : 0 metres
+PSAMEE : 170 metres
+PSAUSY : 180 metres
+PSCEST : 0 metres
+PSFITE : 0 metres
+PSPMFR : 385 metres
+Razavi : 125 metres
+Stupples : 90 metres
+Wang : 120 metres
+Zenati : 45 metres
+
+-----------------------------------------
+TOTAL TRAVEL DISTANCE: 1170 metres
+------------------------------------------
+
+
+========== OPTIMISATION RESULTS ==========
+-------------------------------------
+Module: EPM103
+Start time: 09:00
+Duration: 1 hour(s)
+Room: AG03
+Room type: lab
+Professor: Razavi
+Students: ['PSAUSY']
+-------------------------------------
+Module: EPM203
+Start time: 09:00
+Duration: 2 hour(s)
+Room: AG01
+Room type: lecture
+Professor: Zenati
+Students: ['PSAMEE']
+-------------------------------------
+Module: EPM301
+Start time: 09:00
+Duration: 2 hour(s)
+Room: A102
+Room type: lab
+Professor: Aouf
+Students: ['PSCEST', 'PSPMFR']
+-------------------------------------
+Module: EPM204
+Start time: 11:00
+Duration: 1 hour(s)
+Room: AG01
+Room type: lecture
+Professor: Wang
+Students: ['PSPMFR', 'PSAMEE']
+-------------------------------------
+Module: EPM110
+Start time: 12:00
+Duration: 2 hour(s)
+Room: AG01
+Room type: lecture
+Professor: Aouf
+Students: ['PSAUSY', 'PSAEST']
+-------------------------------------
+Module: EPM302
+Start time: 12:00
+Duration: 2 hour(s)
+Room: AG03
+Room type: lab
+Professor: Razavi
+Students: ['PSFITE']
+-------------------------------------
+Module: EPM102
+Start time: 14:00
+Duration: 2 hour(s)
+Room: AG02
+Room type: lecture
+Professor: Wang
+Students: ['PSAUSY']
+-------------------------------------
+Module: EPM201
+Start time: 14:00
+Duration: 2 hour(s)
+Room: AG01
+Room type: lecture
+Professor: Stupples
+Students: ['PSAMEE']
+-------------------------------------
+Module: EPM303
+Start time: 14:00
+Duration: 2 hour(s)
+Room: AG03
+Room type: lab
+Professor: Zenati
+Students: ['PSPMFR']
+-------------------------------------
+Module: EPM111
+Start time: 16:00
+Duration: 2 hour(s)
+Room: C102
+Room type: lab
+Professor: Hickling
+Students: ['PSAUSY', 'PSPMFR']
+-------------------------------------
+Module: EPM202
+Start time: 17:00
+Duration: 1 hour(s)
+Room: AG01
+Room type: lecture
+Professor: Stupples
+Students: ['PSAEST', 'PSAMEE']
+-------------------------------------
+
+---------- INDIVIDUAL DISTANCES ----------
+
+Aouf : 45 metres
+Hickling : 0 metres
+PSAEST : 0 metres
+PSAMEE : 0 metres
+PSAUSY : 185 metres
+PSCEST : 0 metres
+PSFITE : 0 metres
+PSPMFR : 230 metres
+Razavi : 0 metres
+Stupples : 0 metres
+Wang : 10 metres
+Zenati : 20 metres
+
+-----------------------------------------
+TOTAL TRAVEL DISTANCE: 490 metres
+------------------------------------------
