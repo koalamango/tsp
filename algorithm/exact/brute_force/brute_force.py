@@ -1,5 +1,5 @@
 """
-Author: Oshanda Hembathanthrige
+Author: Oshanda Fernando
 """
 
 import itertools
