@@ -114,17 +114,6 @@ def held_karp(cities, distances):
     # Return the minimum total cost and the ordered sequence of city names
     return minimum_distance, [cities[i] for i in route] + [cities[0]]
 
-# For benchmarking
-def run_held_karp(cities, dist_matrix):
-    import time
-    t_start = time.perf_counter()
-    distances = {c1: {c2: dist_matrix[i][j] for j, c2 in enumerate(cities) if i != j} for i, c1 in enumerate(cities)}
-    cost, route_cities = held_karp(cities, distances, start=0)
-    exec_time = time.perf_counter() - t_start
-    city_to_idx = {city: idx for idx, city in enumerate(cities)}
-    route_indices = [city_to_idx[c] for c in route_cities]
-    return {"route": route_indices, "distance": cost, "time_sec": exec_time, "states": len(cities) * (1 << len(cities)),}
-
 def main():
     filename = input("Enter the Excel filename (ex: coordinates_10_cities.xlsx) : ")
     sheet_number = int(input("Enter the Excel sheet number (1 to 5) : ")) - 1
@@ -139,3 +128,14 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# For benchmarking
+def run_held_karp(cities, dist_matrix):
+    import time
+    t_start = time.perf_counter()
+    distances = {c1: {c2: dist_matrix[i][j] for j, c2 in enumerate(cities) if i != j} for i, c1 in enumerate(cities)}
+    cost, route_cities = held_karp(cities, distances, start=0)
+    exec_time = time.perf_counter() - t_start
+    city_to_idx = {city: idx for idx, city in enumerate(cities)}
+    route_indices = [city_to_idx[c] for c in route_cities]
+    return {"route": route_indices, "distance": cost, "time_sec": exec_time, "states": len(cities) * (1 << len(cities)),}
