@@ -8,7 +8,7 @@ For in-depth explanations and complexity analysis of each algorithm, see [algori
 
 ## Contributors
 - **Richard Clark** (Heuristics)
-- **Oshanda Hembathanthrige** (Exact Methods)
+- **Oshanda Fernando** (Exact Methods)
 - **Tyrone Sequeira** (Approximation)
 - **Jessie W** (Metaheuristics)
 
