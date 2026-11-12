@@ -23,8 +23,8 @@ tsp/
 ├── algorithm/
 │   ├── exact/
 │   │   ├── brute_force/
-│   │   │   ├── brute_force.py                      # Standalone exhaustive permutation solver
-│   │   │   └── brute_force_visualized.py           # Animated circular permutation visualizer
+│   │   │   ├── brute_force.py                      # Standalone permutation solver
+│   │   │   └── brute_force_visualized.py           # Permutation visualizer
 │   │   └── dynamic_programming/
 │   │       ├── held_karp.py                        # Held-Karp exact DP algorithm (O(n^2 * 2^n))
 │   │       └── held_karp_visualized.py             # Interactive step-by-step Held-Karp visualizer
